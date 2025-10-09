@@ -20,6 +20,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.Build
 import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.view.MotionEvent
@@ -44,6 +45,9 @@ class FusionENSKeyboardService : InputMethodService() {
     private var lastSpacePressTime = 0L
     private var lastENSResolutionTime = 0L
     private var lastResolvedText = ""
+    
+    // Popup windows
+    private lateinit var btcPopup: PopupWindow
     
     // Enhanced features
     private var vibrator: Vibrator? = null
@@ -80,11 +84,11 @@ class FusionENSKeyboardService : InputMethodService() {
     )
     
     override fun onCreateInputView(): View {
+        // Initialize SharedPreferences first
+        prefs = getSharedPreferences("fusion_ens_keyboard", Context.MODE_PRIVATE)
+        
         // Initialize enhanced features
         initializeEnhancedFeatures()
-        
-        // Initialize SharedPreferences
-        prefs = getSharedPreferences("fusion_ens_keyboard", Context.MODE_PRIVATE)
         
         // Sync current text with input field
         syncCurrentText()
@@ -109,8 +113,12 @@ class FusionENSKeyboardService : InputMethodService() {
         // Initialize vibrator for haptic feedback
         vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         
-        // Initialize tone generator for key sounds
-        toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 50)
+        // Initialize tone generator for key sounds based on settings
+        val soundEnabled = prefs.getBoolean("keypress_sound_enabled", false)
+        if (soundEnabled) {
+            val volume = prefs.getInt("sound_volume", 50)
+            toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, volume)
+        }
         
         // Initialize gesture detector
         gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
@@ -257,7 +265,8 @@ class FusionENSKeyboardService : InputMethodService() {
             suggestions.forEachIndexed { index, ensName ->
                 val button = createSuggestionChip(ensName, true) // true for ENS styling
                 button.setOnClickListener { 
-                    inputConnection?.commitText(ensName, 1)
+                    // Replace current text with the selected suggestion
+                    replaceCurrentTextWithSuggestion(ensName)
                     currentText = ensName
                     // Refresh suggestions after selection
                     refreshSuggestionBar()
@@ -319,10 +328,227 @@ class FusionENSKeyboardService : InputMethodService() {
         recreateKeyboard()
     }
     
+    private fun resetSuggestionsToDefault() {
+        // Clear currentText for filtering purposes to show default suggestions
+        // but keep the actual input field content intact
+        val originalText = currentText
+        currentText = ""
+        // Recreate the keyboard to show default suggestions
+        recreateKeyboard()
+        // Restore the original text for future operations
+        currentText = originalText
+    }
+    
     private fun syncCurrentText() {
         // Get the current text from the input field
         val currentInputText = inputConnection?.getTextBeforeCursor(1000, 0)?.toString() ?: ""
         currentText = currentInputText
+    }
+    
+    private fun replaceCurrentTextWithSuggestion(suggestion: String) {
+        try {
+            // First, sync with the actual input field content
+            syncCurrentText()
+            
+            // Get the current text length to know how many characters to delete
+            val currentTextLength = currentText.length
+            
+            // Delete the current text by sending backspace events
+            for (i in 0 until currentTextLength) {
+                inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
+                inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL))
+            }
+            
+            // Insert the new suggestion
+            inputConnection?.commitText(suggestion, 1)
+            
+            // Update currentText to match the new content
+            currentText = suggestion
+        } catch (e: Exception) {
+            println("Error replacing text with suggestion: ${e.message}")
+        }
+    }
+    
+    private fun resolveCurrentTextAsENS() {
+        try {
+            // Sync current text with input field
+            syncCurrentText()
+            
+            // Check if current text is a valid ENS name
+            if (ensResolver.isValidENS(currentText)) {
+                val ensName = ensResolver.getENSNameFromText(currentText)
+                if (ensName != null) {
+                    // Check if we're in a browser context
+                    if (isInBrowserContext()) {
+                        // Handle browser-specific action
+                        handleBrowserENSResolution(ensName)
+                    } else {
+                        // Standard resolution (replace with address)
+                        resolveENSAndReplace(ensName)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Log error and prevent crash
+            println("Error in resolveCurrentTextAsENS: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+    
+    private fun isInBrowserContext(): Boolean {
+        // For now, we'll use a simple approach - check if we're in a browser
+        // This could be enhanced with more sophisticated detection
+        return false // Default to non-browser behavior for now
+    }
+    
+    private fun handleBrowserENSResolution(ensName: String) {
+        try {
+            val defaultAction = prefs.getString("default_browser_action", "etherscan") ?: "etherscan"
+        
+        CoroutineScope(Dispatchers.Main).launch {
+            when (defaultAction) {
+                "etherscan" -> {
+                    // Resolve to address and open Etherscan
+                    val resolvedAddress = ensResolver.resolveENSName(ensName)
+                    if (resolvedAddress != null) {
+                        openEtherscan(resolvedAddress)
+                        saveENSName(ensName)
+                    }
+                }
+                "url" -> {
+                    // Try to resolve URL text record
+                    val url = ensResolver.resolveENSTextRecord(ensName, "url")
+                    if (url != null) {
+                        openURL(url)
+                        saveENSName(ensName)
+                    } else {
+                        // Fallback to Etherscan
+                        val resolvedAddress = ensResolver.resolveENSName(ensName)
+                        if (resolvedAddress != null) {
+                            openEtherscan(resolvedAddress)
+                            saveENSName(ensName)
+                        }
+                    }
+                }
+                "github" -> {
+                    // Try to resolve GitHub text record
+                    val github = ensResolver.resolveENSTextRecord(ensName, "github")
+                    if (github != null) {
+                        openGitHub(github)
+                        saveENSName(ensName)
+                    } else {
+                        // Fallback to Etherscan
+                        val resolvedAddress = ensResolver.resolveENSName(ensName)
+                        if (resolvedAddress != null) {
+                            openEtherscan(resolvedAddress)
+                            saveENSName(ensName)
+                        }
+                    }
+                }
+                "x" -> {
+                    // Try to resolve X/Twitter text record
+                    val twitter = ensResolver.resolveENSTextRecord(ensName, "x")
+                    if (twitter != null) {
+                        openTwitter(twitter)
+                        saveENSName(ensName)
+                    } else {
+                        // Fallback to Etherscan
+                        val resolvedAddress = ensResolver.resolveENSName(ensName)
+                        if (resolvedAddress != null) {
+                            openEtherscan(resolvedAddress)
+                            saveENSName(ensName)
+                        }
+                    }
+                }
+            }
+        }
+        } catch (e: Exception) {
+            // Log error and prevent crash
+            println("Error in handleBrowserENSResolution: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+    
+    private fun resolveENSAndReplace(ensName: String) {
+        CoroutineScope(Dispatchers.Main).launch {
+            val resolvedAddress = ensResolver.resolveENSName(ensName)
+            if (resolvedAddress != null) {
+                // Replace current text with resolved address
+                replaceCurrentTextInInputField(resolvedAddress)
+                currentText = resolvedAddress
+                
+                // Save the ENS name for suggestions
+                saveENSName(ensName)
+                
+                // Show feedback
+                triggerHapticFeedback()
+            }
+        }
+    }
+    
+    private fun replaceCurrentTextInInputField(newText: String) {
+        try {
+            // First, sync with the actual input field content
+            syncCurrentText()
+            
+            // Get the current text length to know how many characters to delete
+            val currentTextLength = currentText.length
+            
+            // Delete the current text by sending backspace events
+            for (i in 0 until currentTextLength) {
+                inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
+                inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL))
+            }
+            
+            // Insert the new text
+            inputConnection?.commitText(newText, 1)
+            
+            // Update currentText to match the new content
+            currentText = newText
+        } catch (e: Exception) {
+            println("Error replacing current text: ${e.message}")
+        }
+    }
+    
+    private fun openEtherscan(address: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://etherscan.io/address/$address"))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (e: Exception) {
+            println("Error opening Etherscan: ${e.message}")
+        }
+    }
+    
+    private fun openURL(url: String) {
+        try {
+            val finalUrl = if (url.startsWith("http")) url else "https://$url"
+            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(finalUrl))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (e: Exception) {
+            println("Error opening URL: ${e.message}")
+        }
+    }
+    
+    private fun openGitHub(username: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/$username"))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (e: Exception) {
+            println("Error opening GitHub: ${e.message}")
+        }
+    }
+    
+    private fun openTwitter(username: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://x.com/$username"))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (e: Exception) {
+            println("Error opening Twitter: ${e.message}")
+        }
     }
     
     private fun createQPRow(): LinearLayout {
@@ -421,7 +647,7 @@ class FusionENSKeyboardService : InputMethodService() {
         // Numbers/Symbols toggle (left) - smaller font to prevent line break
         val toggleText = if (isNumbersMode || isSymbolsMode) "ABC" else "?123"
         val toggleButton = createKeyButton(toggleText, Color.parseColor("#3A3A3A"), 1.2f)
-        toggleButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f) // Smaller font for ?123
+        toggleButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f) // Smaller font for ?123
         toggleButton.setOnClickListener { 
             isNumbersMode = !isNumbersMode
             isSymbolsMode = false
@@ -431,7 +657,7 @@ class FusionENSKeyboardService : InputMethodService() {
         
         // .eth button (replacing emoji) with long-press menu
         val ethButton = createKeyButton(".eth", Color.parseColor("#0080BC"), 1f)
-        ethButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f) // Smaller font for .eth
+        ethButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f) // Smaller font for .eth
         ethButton.setOnClickListener { 
             inputConnection?.commitText(".eth", 1)
             currentText += ".eth"
@@ -451,20 +677,61 @@ class FusionENSKeyboardService : InputMethodService() {
         row.addView(globeButton)
         
         // Space bar (wider like Gboard)
-        val spaceButton = createKeyButton("English", Color.parseColor("#4A4A4A"), 4f)
+        val spaceButton = createKeyButton("", Color.parseColor("#4A4A4A"), 4f)
         spaceButton.setOnClickListener { 
             val currentTime = System.currentTimeMillis()
             if (currentTime - lastSpacePressTime < 500) {
                 // Double tap space for period
                 inputConnection?.commitText(". ", 1)
                 currentText += ". "
+                // Reset suggestions after period
+                resetSuggestionsToDefault()
             } else {
-                onKeyPress(" ")
+                // Single space press
+                inputConnection?.commitText(" ", 1)
+                currentText += " "
+                // Reset suggestions after space
+                resetSuggestionsToDefault()
             }
             lastSpacePressTime = currentTime
         }
-        row.addView(spaceButton)
         
+        // Long press spacebar to resolve ENS
+        spaceButton.setOnLongClickListener {
+            resolveCurrentTextAsENS()
+            true // Consume the long press event
+        }
+        row.addView(spaceButton)
+
+        // :btc key (crypto ticker) - between space and period
+        val btcButton = createKeyButton(":btc", Color.parseColor("#FF9500"), 1f) // Orange color like iOS
+        btcButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f) // Smaller font
+        // Ensure the button maintains its orange color after press
+        btcButton.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    // Slightly darker orange on press
+                    btcButton.setBackgroundColor(Color.parseColor("#E6850E"))
+                    playKeySound()
+                    triggerHapticFeedback()
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    // Restore original orange color
+                    btcButton.setBackgroundColor(Color.parseColor("#FF9500"))
+                }
+            }
+            false // Don't consume the event
+        }
+        btcButton.setOnClickListener {
+            inputConnection?.commitText(":btc", 1)
+            currentText += ":btc"
+        }
+        btcButton.setOnLongClickListener {
+            showCryptoTickerMenu(it as Button)
+            true
+        }
+        row.addView(btcButton)
+
         // Period key (like Gboard)
         val periodButton = createKeyButton(".", Color.parseColor("#4A4A4A"), 1f)
         periodButton.setOnClickListener { onKeyPress(".") }
@@ -767,37 +1034,46 @@ class FusionENSKeyboardService : InputMethodService() {
         lastENSResolutionTime = currentTime
         lastResolvedText = selectedText // Track what we're resolving
         
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val address = ensResolver.resolveENSName(selectedText.trim())
-                if (address != null) {
-                    println("ENS Resolution Success: $selectedText -> $address")
-                    
-                    // Replace the selected text with the resolved address
-                    withContext(Dispatchers.Main) {
-                        replaceSelectedText(address)
-                        saveENSName(selectedText.trim())
-                        showENSResolutionFeedback(selectedText.trim(), address)
+        val ensName = selectedText.trim()
+        
+        // Check if we're in a browser context
+        if (isInBrowserContext()) {
+            // Handle browser-specific action
+            handleBrowserENSResolution(ensName)
+        } else {
+            // Standard resolution (replace with address)
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val address = ensResolver.resolveENSName(ensName)
+                    if (address != null) {
+                        println("ENS Resolution Success: $ensName -> $address")
                         
-                        // Clear the resolved text after a delay to allow new selections
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        // Replace the selected text with the resolved address
+                        withContext(Dispatchers.Main) {
+                            replaceSelectedText(address)
+                            saveENSName(ensName)
+                            showENSResolutionFeedback(ensName, address)
+                            
+                            // Clear the resolved text after a delay to allow new selections
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                lastResolvedText = ""
+                            }, 2000)
+                        }
+                    } else {
+                        println("ENS Resolution Error: $ensName not found")
+                        withContext(Dispatchers.Main) {
+                            showENSResolutionError(ensName)
+                            // Clear the resolved text even on error
                             lastResolvedText = ""
-                        }, 2000)
+                        }
                     }
-                } else {
-                    println("ENS Resolution Error: $selectedText not found")
+                } catch (e: Exception) {
+                    println("ENS Resolution error: ${e.message}")
                     withContext(Dispatchers.Main) {
-                        showENSResolutionError(selectedText.trim())
+                        showENSResolutionError(ensName)
                         // Clear the resolved text even on error
                         lastResolvedText = ""
                     }
-                }
-            } catch (e: Exception) {
-                println("ENS Resolution error: ${e.message}")
-                withContext(Dispatchers.Main) {
-                    showENSResolutionError(selectedText.trim())
-                    // Clear the resolved text even on error
-                    lastResolvedText = ""
                 }
             }
         }
@@ -891,6 +1167,93 @@ class FusionENSKeyboardService : InputMethodService() {
         return button
     }
     
+    private fun showCryptoTickerMenu(anchorButton: Button) {
+        // Add haptic feedback
+        triggerHapticFeedback()
+        
+        // Create a container for the popup
+        val containerView = LinearLayout(this)
+        containerView.orientation = LinearLayout.VERTICAL
+        containerView.setPadding(8, 8, 8, 8)
+        containerView.setBackgroundColor(Color.parseColor("#2C2C2C"))
+        
+        // Create a horizontal scroll view for the crypto ticker options
+        val scrollView = HorizontalScrollView(this)
+        scrollView.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        
+        // Create the horizontal layout for buttons
+        val popupView = LinearLayout(this)
+        popupView.orientation = LinearLayout.HORIZONTAL
+        popupView.setPadding(8, 8, 8, 8)
+        
+        // Crypto ticker options (like iOS)
+        val cryptoTickers = listOf(
+            ":btc", ":sol", ":doge", ":xrp", ":ltc", ":ada", ":dot",
+            ":url", ":x", ":github", ":name", ":bio"
+        )
+        
+        cryptoTickers.forEach { ticker ->
+            val button = createCryptoTickerButton(ticker)
+            button.setOnClickListener {
+                inputConnection?.commitText(ticker, 1)
+                currentText += ticker
+                // Dismiss popup
+                if (::btcPopup.isInitialized) {
+                    btcPopup.dismiss()
+                }
+            }
+            popupView.addView(button)
+        }
+        
+        // Add the horizontal layout to scroll view
+        scrollView.addView(popupView)
+        containerView.addView(scrollView)
+        
+        // Create and show popup window
+        btcPopup = PopupWindow(
+            containerView,
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            true
+        )
+        
+        // Position popup above the :btc button
+        btcPopup.showAsDropDown(anchorButton, 0, -anchorButton.height - 20)
+        
+        // Auto-dismiss after 5 seconds (longer since it's scrollable)
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            if (btcPopup.isShowing) {
+                btcPopup.dismiss()
+            }
+        }, 5000)
+    }
+    
+    private fun createCryptoTickerButton(text: String): Button {
+        val button = Button(this)
+        button.text = text
+        button.setTextColor(Color.parseColor("#FFFFFF"))
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        button.setPadding(12, 8, 12, 8)
+        
+        // Orange background like iOS :btc key
+        val drawable = GradientDrawable()
+        drawable.setColor(Color.parseColor("#FF9500"))
+        drawable.cornerRadius = 8f
+        button.background = drawable
+        
+        val params = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        params.setMargins(4, 0, 4, 0)
+        button.layoutParams = params
+        
+        return button
+    }
+    
     private fun saveENSName(ensName: String) {
         val savedENS = getSavedENS().toMutableSet()
         savedENS.add(ensName)
@@ -919,6 +1282,9 @@ class FusionENSKeyboardService : InputMethodService() {
     
     // Enhanced feedback methods
     private fun triggerHapticFeedback() {
+        val hapticEnabled = prefs.getBoolean("haptic_feedback_enabled", true)
+        if (!hapticEnabled) return
+        
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator?.vibrate(VibrationEffect.createOneShot(10, VibrationEffect.DEFAULT_AMPLITUDE))
@@ -932,6 +1298,9 @@ class FusionENSKeyboardService : InputMethodService() {
     }
     
     private fun playKeySound() {
+        val soundEnabled = prefs.getBoolean("keypress_sound_enabled", false)
+        if (!soundEnabled || toneGenerator == null) return
+        
         try {
             toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 50)
         } catch (e: Exception) {

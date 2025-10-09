@@ -33,6 +33,13 @@
             </intent-filter>
         </activity>
         
+        <!-- Settings Activity -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true"
+            android:label="Fusion ENS Settings"
+            android:theme="@style/Theme.FusionENS" />
+        
         <!-- Original Working Keyboard -->
         <service
             android:name=".keyboard.FusionENSKeyboardService"
