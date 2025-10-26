@@ -341,29 +341,86 @@ class FusionENSKeyboardService : InputMethodService() {
     
     private fun syncCurrentText() {
         // Get the current text from the input field
-        val currentInputText = inputConnection?.getTextBeforeCursor(1000, 0)?.toString() ?: ""
-        currentText = currentInputText
+        val textBeforeCursor = inputConnection?.getTextBeforeCursor(1000, 0)?.toString() ?: ""
+        val textAfterCursor = inputConnection?.getTextAfterCursor(1000, 0)?.toString() ?: ""
+        currentText = textBeforeCursor + textAfterCursor
+    }
+    
+    private fun findENSNameInText(text: String): String? {
+        // Look for ENS names in the text (ending with .eth)
+        val ensPattern = Regex("\\b\\w+\\.eth\\b")
+        val matches = ensPattern.findAll(text)
+        return matches.lastOrNull()?.value
+    }
+    
+    private fun findPartialTextInInput(text: String): String? {
+        // Find the last word or partial word that the user is typing
+        // This helps identify what to replace when selecting suggestions
+        val words = text.trim().split("\\s+".toRegex())
+        if (words.isNotEmpty()) {
+            val lastWord = words.last()
+            // If the last word is not empty and doesn't end with a space, it's partial
+            if (lastWord.isNotEmpty() && !text.endsWith(" ")) {
+                return lastWord
+            }
+        }
+        return null
+    }
+    
+    private fun checkForENSResolution(text: String) {
+        if (ensResolver.isValidENS(text)) {
+            CoroutineScope(Dispatchers.IO).launch {
+                val address = ensResolver.resolveENSName(text)
+                if (address != null) {
+                    println("ENS Resolved: $text -> $address")
+                    // Replace the ENS name with the resolved address
+                    withContext(Dispatchers.Main) {
+                        replaceCurrentTextInInputField(address)
+                        currentText = address
+                    }
+                }
+            }
+        }
     }
     
     private fun replaceCurrentTextWithSuggestion(suggestion: String) {
         try {
-            // First, sync with the actual input field content
-            syncCurrentText()
-            
-            // Get the current text length to know how many characters to delete
-            val currentTextLength = currentText.length
-            
-            // Delete the current text by sending backspace events
-            for (i in 0 until currentTextLength) {
-                inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
-                inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL))
+            val inputConnection = currentInputConnection
+            if (inputConnection != null) {
+                // Get the current text before cursor
+                val textBeforeCursor = inputConnection.getTextBeforeCursor(1000, 0)?.toString() ?: ""
+                val textAfterCursor = inputConnection.getTextAfterCursor(1000, 0)?.toString() ?: ""
+                
+                // Find the partial text that matches the current input
+                val partialText = findPartialTextInInput(textBeforeCursor)
+                if (partialText != null) {
+                    // Find the position of the partial text in the input
+                    val partialStartIndex = textBeforeCursor.lastIndexOf(partialText)
+                    if (partialStartIndex != -1) {
+                        // Calculate how many characters to delete from the cursor position
+                        val deleteCount = textBeforeCursor.length - partialStartIndex
+                        
+                        // Delete the partial text using deleteSurroundingText
+                        inputConnection.deleteSurroundingText(deleteCount, 0)
+                        
+                        // Insert the new suggestion
+                        inputConnection.commitText(suggestion, 1)
+                        
+                        // Update currentText to reflect the change
+                        currentText = textBeforeCursor.substring(0, partialStartIndex) + suggestion + textAfterCursor
+                    } else {
+                        // Fallback: replace all text before cursor
+                        inputConnection.deleteSurroundingText(textBeforeCursor.length, 0)
+                        inputConnection.commitText(suggestion, 1)
+                        currentText = suggestion + textAfterCursor
+                    }
+                } else {
+                    // Fallback: replace all text before cursor
+                    inputConnection.deleteSurroundingText(textBeforeCursor.length, 0)
+                    inputConnection.commitText(suggestion, 1)
+                    currentText = suggestion + textAfterCursor
+                }
             }
-            
-            // Insert the new suggestion
-            inputConnection?.commitText(suggestion, 1)
-            
-            // Update currentText to match the new content
-            currentText = suggestion
         } catch (e: Exception) {
             println("Error replacing text with suggestion: ${e.message}")
         }
@@ -373,10 +430,13 @@ class FusionENSKeyboardService : InputMethodService() {
         try {
             // Sync current text with input field
             syncCurrentText()
+            println("resolveCurrentTextAsENS: currentText = '$currentText'")
             
             // Check if current text is a valid ENS name
             if (ensResolver.isValidENS(currentText)) {
+                println("resolveCurrentTextAsENS: currentText is valid ENS")
                 val ensName = ensResolver.getENSNameFromText(currentText)
+                println("resolveCurrentTextAsENS: extracted ensName = '$ensName'")
                 if (ensName != null) {
                     // Check if we're in a browser context
                     if (isInBrowserContext()) {
@@ -386,7 +446,11 @@ class FusionENSKeyboardService : InputMethodService() {
                         // Standard resolution (replace with address)
                         resolveENSAndReplace(ensName)
                     }
+                } else {
+                    println("resolveCurrentTextAsENS: ensName is null")
                 }
+            } else {
+                println("resolveCurrentTextAsENS: currentText is not valid ENS")
             }
         } catch (e: Exception) {
             // Log error and prevent crash
@@ -396,9 +460,47 @@ class FusionENSKeyboardService : InputMethodService() {
     }
     
     private fun isInBrowserContext(): Boolean {
-        // For now, we'll use a simple approach - check if we're in a browser
-        // This could be enhanced with more sophisticated detection
-        return false // Default to non-browser behavior for now
+        try {
+            // Get the package name of the app that's using the keyboard
+            val currentPackageName = currentInputEditorInfo?.packageName?.lowercase()
+            println("isInBrowserContext: current package = '$currentPackageName'")
+            
+            val browserPackages = listOf(
+                "com.android.chrome",
+                "com.chrome.beta",
+                "com.chrome.dev",
+                "com.chrome.canary",
+                "org.mozilla.firefox",
+                "org.mozilla.firefox_beta",
+                "org.mozilla.fenix",
+                "com.microsoft.emmx",
+                "com.opera.browser",
+                "com.opera.browser.beta",
+                "com.brave.browser",
+                "com.duckduckgo.mobile.android",
+                "com.vivaldi.browser",
+                "com.samsung.android.app.sbrowser",
+                "com.sec.android.app.sbrowser"
+            )
+
+            // Check if current package is a browser
+            val isBrowser = currentPackageName?.let { packageName ->
+                browserPackages.any { packageName.contains(it) }
+            } ?: false
+            println("isInBrowserContext: isBrowser = $isBrowser")
+            
+            if (isBrowser) {
+                return true
+            }
+            
+            // Check if the current input field is likely an address bar
+            // Note: We can't easily detect address bar input type from InputConnection
+            // So we rely mainly on package name detection for browser context
+        } catch (e: Exception) {
+            println("Error checking browser context: ${e.message}")
+        }
+
+        return false
     }
     
     private fun handleBrowserENSResolution(ensName: String) {
@@ -470,41 +572,81 @@ class FusionENSKeyboardService : InputMethodService() {
     }
     
     private fun resolveENSAndReplace(ensName: String) {
+        println("resolveENSAndReplace: resolving ensName = '$ensName'")
         CoroutineScope(Dispatchers.Main).launch {
-            val resolvedAddress = ensResolver.resolveENSName(ensName)
-            if (resolvedAddress != null) {
-                // Replace current text with resolved address
-                replaceCurrentTextInInputField(resolvedAddress)
-                currentText = resolvedAddress
-                
-                // Save the ENS name for suggestions
-                saveENSName(ensName)
+            val resolvedValue = ensResolver.resolveENSName(ensName)
+            println("resolveENSAndReplace: resolved value = '$resolvedValue'")
+            if (resolvedValue != null) {
+                // Check if we're in browser context
+                if (isInBrowserContext()) {
+                    // In browser context - check if this is a text record (URL) or an address
+                    if (resolvedValue.startsWith("http://") || resolvedValue.startsWith("https://")) {
+                        // This is a text record resolved to a URL - open it
+                        println("resolveENSAndReplace: Opening URL: $resolvedValue")
+                        openURL(resolvedValue)
+                        saveENSName(ensName)
+                    } else {
+                        // This is an address - replace the text
+                        println("resolveENSAndReplace: Replacing text with address: $resolvedValue")
+                        replaceCurrentTextInInputField(resolvedValue)
+                        currentText = resolvedValue
+                        saveENSName(ensName)
+                    }
+                } else {
+                    // Not in browser context - always replace text (never open URLs)
+                    // This matches iOS behavior: text records resolve to addresses in regular text fields
+                    println("resolveENSAndReplace: Replacing text with resolved value: $resolvedValue")
+                    replaceCurrentTextInInputField(resolvedValue)
+                    currentText = resolvedValue
+                    saveENSName(ensName)
+                }
                 
                 // Show feedback
                 triggerHapticFeedback()
+            } else {
+                println("resolveENSAndReplace: no value resolved for '$ensName'")
             }
         }
     }
     
     private fun replaceCurrentTextInInputField(newText: String) {
         try {
-            // First, sync with the actual input field content
-            syncCurrentText()
-            
-            // Get the current text length to know how many characters to delete
-            val currentTextLength = currentText.length
-            
-            // Delete the current text by sending backspace events
-            for (i in 0 until currentTextLength) {
-                inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
-                inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL))
+            val inputConnection = currentInputConnection
+            if (inputConnection != null) {
+                // Get the current text before cursor
+                val textBeforeCursor = inputConnection.getTextBeforeCursor(1000, 0)?.toString() ?: ""
+                val textAfterCursor = inputConnection.getTextAfterCursor(1000, 0)?.toString() ?: ""
+                
+                // Find the ENS name in the text before cursor
+                val ensName = findENSNameInText(textBeforeCursor)
+                if (ensName != null) {
+                    // Find the position of the ENS name in the text
+                    val ensStartIndex = textBeforeCursor.lastIndexOf(ensName)
+                    if (ensStartIndex != -1) {
+                        // Calculate how many characters to delete from the cursor position
+                        val deleteCount = textBeforeCursor.length - ensStartIndex
+                        
+                        // Delete the ENS name using deleteSurroundingText
+                        inputConnection.deleteSurroundingText(deleteCount, 0)
+                        
+                        // Insert the new text
+                        inputConnection.commitText(newText, 1)
+                        
+                        // Update currentText to reflect the change
+                        currentText = textBeforeCursor.substring(0, ensStartIndex) + newText + textAfterCursor
+                    } else {
+                        // Fallback: replace all text before cursor
+                        inputConnection.deleteSurroundingText(textBeforeCursor.length, 0)
+                        inputConnection.commitText(newText, 1)
+                        currentText = newText + textAfterCursor
+                    }
+                } else {
+                    // Fallback: replace all text before cursor
+                    inputConnection.deleteSurroundingText(textBeforeCursor.length, 0)
+                    inputConnection.commitText(newText, 1)
+                    currentText = newText + textAfterCursor
+                }
             }
-            
-            // Insert the new text
-            inputConnection?.commitText(newText, 1)
-            
-            // Update currentText to match the new content
-            currentText = newText
         } catch (e: Exception) {
             println("Error replacing current text: ${e.message}")
         }
@@ -740,7 +882,7 @@ class FusionENSKeyboardService : InputMethodService() {
         // Enter key (right side)
         val enterButton = createKeyButton("⏎", Color.parseColor("#3A3A3A"), 1.2f)
         enterButton.setOnClickListener { 
-            inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+            handleEnterKeyPress()
         }
         row.addView(enterButton)
         
@@ -960,8 +1102,43 @@ class FusionENSKeyboardService : InputMethodService() {
         inputConnection?.commitText(textToInsert, 1)
         currentText += textToInsert
         
+        // Check if auto-resolve is enabled
+        if (prefs.getBoolean("auto_resolve_enabled", false)) {
+            checkForENSResolution(currentText)
+        }
+        
         // Refresh suggestions when typing
         refreshSuggestionBar()
+    }
+    
+    private fun handleEnterKeyPress() {
+        println("handleEnterKeyPress: Enter key pressed")
+        // Check if we're in a browser context
+        val isBrowser = isInBrowserContext()
+        println("handleEnterKeyPress: isInBrowserContext = $isBrowser")
+        
+        if (isBrowser) {
+            // In browser context - try to resolve ENS before triggering enter
+            val inputText = extractInputFromAddressBar()
+            println("handleEnterKeyPress: extracted inputText = '$inputText'")
+            
+            if (inputText.isNotEmpty() && ensResolver.isValidENS(inputText)) {
+                println("handleEnterKeyPress: Valid ENS detected, resolving...")
+                // Show loading state on enter button
+                updateEnterButtonToLoading()
+                
+                // Resolve ENS and then trigger enter
+                resolveENSForEnterKey(inputText)
+            } else {
+                println("handleEnterKeyPress: Not a valid ENS, proceeding with normal enter")
+                // Not an ENS name, proceed with normal enter
+                inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+            }
+        } else {
+            println("handleEnterKeyPress: Not in browser context, proceeding with normal enter")
+            // Not in browser context - proceed with normal enter
+            inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+        }
     }
     
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
@@ -1035,24 +1212,28 @@ class FusionENSKeyboardService : InputMethodService() {
         lastResolvedText = selectedText // Track what we're resolving
         
         val ensName = selectedText.trim()
+        println("resolveSelectedENS: resolving selectedText = '$ensName'")
         
         // Check if we're in a browser context
         if (isInBrowserContext()) {
             // Handle browser-specific action
             handleBrowserENSResolution(ensName)
         } else {
-            // Standard resolution (replace with address)
+            // Standard resolution (replace with address) - NOT in browser context
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    val address = ensResolver.resolveENSName(ensName)
-                    if (address != null) {
-                        println("ENS Resolution Success: $ensName -> $address")
+                    val resolvedValue = ensResolver.resolveENSName(ensName)
+                    println("resolveSelectedENS: resolved value = '$resolvedValue'")
+                    if (resolvedValue != null) {
+                        println("ENS Resolution Success: $ensName -> $resolvedValue")
                         
-                        // Replace the selected text with the resolved address
+                        // In non-browser context, always replace text (never open URLs)
+                        // This matches iOS behavior: text records resolve to addresses in regular text fields
+                        println("resolveSelectedENS: Replacing text with resolved value: $resolvedValue")
                         withContext(Dispatchers.Main) {
-                            replaceSelectedText(address)
+                            replaceSelectedText(resolvedValue)
                             saveENSName(ensName)
-                            showENSResolutionFeedback(ensName, address)
+                            showENSResolutionFeedback(ensName, resolvedValue)
                             
                             // Clear the resolved text after a delay to allow new selections
                             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
@@ -1391,6 +1572,81 @@ class FusionENSKeyboardService : InputMethodService() {
         }
         
         return closestKey
+    }
+    
+    private fun extractInputFromAddressBar(): String {
+        try {
+            val inputConnection = currentInputConnection
+            if (inputConnection != null) {
+                val beforeText = inputConnection.getTextBeforeCursor(1000, 0)?.toString() ?: ""
+                val afterText = inputConnection.getTextAfterCursor(1000, 0)?.toString() ?: ""
+                val fullText = beforeText + afterText
+                println("extractInputFromAddressBar: beforeText = '$beforeText', afterText = '$afterText', fullText = '$fullText'")
+                
+                // Extract the last word/input (similar to iOS implementation)
+                val words = fullText.trim().split("\\s+".toRegex())
+                val result = if (words.isNotEmpty()) words.last() else ""
+                println("extractInputFromAddressBar: words = $words, result = '$result'")
+                return result
+            }
+        } catch (e: Exception) {
+            println("extractInputFromAddressBar: error = ${e.message}")
+            // Fallback to current text
+        }
+        println("extractInputFromAddressBar: fallback to currentText = '$currentText'")
+        return currentText
+    }
+    
+    private fun updateEnterButtonToLoading() {
+        // Find the enter button and update its text to show loading
+        // This is a simplified version - in a real implementation you'd need to track the button reference
+        // For now, we'll just proceed with the resolution
+    }
+    
+    private fun resolveENSForEnterKey(inputText: String) {
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val resolvedValue = ensResolver.resolveENSName(inputText)
+                if (resolvedValue != null) {
+                    // Clear the address bar and insert the resolved URL
+                    clearAddressBarAndInsertURL(resolvedValue)
+                    
+                    // Trigger the enter key to navigate
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                    }, 200) // Small delay to ensure URL is inserted
+                } else {
+                    // If no resolution, proceed with normal enter
+                    inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                }
+            } catch (e: Exception) {
+                // If error, proceed with normal enter
+                inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+            }
+        }
+    }
+    
+    private fun clearAddressBarAndInsertURL(resolvedURL: String) {
+        try {
+            val inputConnection = currentInputConnection
+            if (inputConnection != null) {
+                val beforeText = inputConnection.getTextBeforeCursor(1000, 0)?.toString() ?: ""
+                val afterText = inputConnection.getTextAfterCursor(1000, 0)?.toString() ?: ""
+                val totalLength = beforeText.length + afterText.length
+                
+                // Delete all text in the address bar (with safety limit)
+                val maxDeletions = minOf(totalLength, 1000) // Safety limit
+                inputConnection.deleteSurroundingText(maxDeletions, 0)
+                
+                // Insert the resolved URL
+                inputConnection.commitText(resolvedURL, 1)
+                currentText = resolvedURL
+            }
+        } catch (e: Exception) {
+            // Fallback: just insert the URL
+            inputConnection?.commitText(resolvedURL, 1)
+            currentText = resolvedURL
+        }
     }
 }
 

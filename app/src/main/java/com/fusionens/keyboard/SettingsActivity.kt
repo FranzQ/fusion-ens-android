@@ -16,6 +16,7 @@ class SettingsActivity : Activity() {
     private lateinit var soundVolumeSeekBar: SeekBar
     private lateinit var browserActionSpinner: Spinner
     private lateinit var soundVolumeText: TextView
+    private lateinit var autoResolveToggle: Switch
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,6 +37,7 @@ class SettingsActivity : Activity() {
         soundVolumeSeekBar = findViewById(R.id.soundVolumeSeekBar)
         browserActionSpinner = findViewById(R.id.browserActionSpinner)
         soundVolumeText = findViewById(R.id.soundVolumeText)
+        autoResolveToggle = findViewById(R.id.autoResolveToggle)
         
         // Setup browser action spinner
         val browserActions = arrayOf(
@@ -72,6 +74,9 @@ class SettingsActivity : Activity() {
         }
         browserActionSpinner.setSelection(actionIndex)
         
+        // Load auto-resolve setting (disabled by default)
+        autoResolveToggle.isChecked = prefs.getBoolean("auto_resolve_enabled", false)
+        
         // Update sound volume visibility
         updateSoundVolumeVisibility()
     }
@@ -97,6 +102,10 @@ class SettingsActivity : Activity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
+        
+        autoResolveToggle.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("auto_resolve_enabled", isChecked).apply()
+        }
         
         browserActionSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {

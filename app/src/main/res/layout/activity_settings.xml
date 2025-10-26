@@ -141,6 +141,47 @@
 
         </LinearLayout>
 
+        <!-- Auto-Resolve ENS -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="#2C2C2C"
+            android:padding="16dp"
+            android:layout_marginBottom="8dp"
+            android:gravity="center_vertical">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Auto-Resolve ENS"
+                    android:textSize="16sp"
+                    android:textColor="#FFFFFF" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Automatically resolve ENS names as you type"
+                    android:textSize="12sp"
+                    android:textColor="#CCCCCC"
+                    android:layout_marginTop="4dp" />
+
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/autoResolveToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false" />
+
+        </LinearLayout>
+
         <!-- Browser Actions Section -->
         <TextView
             android:layout_width="match_parent"

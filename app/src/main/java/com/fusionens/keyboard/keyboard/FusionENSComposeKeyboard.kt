@@ -12,6 +12,7 @@ import android.os.Build
 import android.content.Context
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.content.SharedPreferences
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,6 +37,7 @@ import com.fusionens.keyboard.ens.ENSResolver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Professional FlorisBoard-inspired keyboard using Jetpack Compose
@@ -48,10 +50,16 @@ class FusionENSComposeKeyboard : InputMethodService() {
     private var isShiftPressed = false
     private var isNumbersMode = false
     private var lastSpacePressTime = 0L
+    private lateinit var prefs: SharedPreferences
     
     // Enhanced features
     private var vibrator: Vibrator? = null
     private var toneGenerator: ToneGenerator? = null
+    
+    override fun onCreate() {
+        super.onCreate()
+        prefs = getSharedPreferences("fusion_ens_keyboard", Context.MODE_PRIVATE)
+    }
     
     // FlorisBoard-inspired theme
     private val keyboardTheme = ComposeKeyboardTheme()
@@ -459,9 +467,20 @@ class FusionENSComposeKeyboard : InputMethodService() {
     }
     
     private fun onKeyPress(key: String) {
-        inputConnection?.commitText(key, 1)
-        currentText += key
-        checkForENSResolution(currentText)
+        // Check if this is a suggestion selection (contains a space at the end)
+        if (key.endsWith(" ")) {
+            // This is a suggestion selection, replace current text
+            replaceCurrentTextWithSuggestion(key.trim())
+        } else {
+            // Regular key press, just append
+            inputConnection?.commitText(key, 1)
+            currentText += key
+        }
+        
+        // Check if auto-resolve is enabled
+        if (prefs.getBoolean("auto_resolve_enabled", false)) {
+            checkForENSResolution(currentText)
+        }
     }
     
     private fun onBackspace() {
@@ -470,7 +489,7 @@ class FusionENSComposeKeyboard : InputMethodService() {
     }
     
     private fun onEnter() {
-        inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+        handleEnterKeyPress()
     }
     
     private fun onSpace() {
@@ -503,9 +522,121 @@ class FusionENSComposeKeyboard : InputMethodService() {
                 val address = ensResolver.resolveENSName(text)
                 if (address != null) {
                     println("ENS Resolved: $text -> $address")
+                    // Replace the ENS name with the resolved address
+                    withContext(Dispatchers.Main) {
+                        replaceCurrentTextInInputField(address)
+                        currentText = address
+                    }
                 }
             }
         }
+    }
+    
+    private fun replaceCurrentTextWithSuggestion(suggestion: String) {
+        try {
+            val conn = inputConnection
+            if (conn != null) {
+                // Get the current text before cursor
+                val textBeforeCursor = conn.getTextBeforeCursor(1000, 0)?.toString() ?: ""
+                val textAfterCursor = conn.getTextAfterCursor(1000, 0)?.toString() ?: ""
+                
+                // Find the partial text that matches the current input
+                val partialText = findPartialTextInInput(textBeforeCursor)
+                if (partialText != null) {
+                    // Find the position of the partial text in the input
+                    val partialStartIndex = textBeforeCursor.lastIndexOf(partialText)
+                    if (partialStartIndex != -1) {
+                        // Calculate how many characters to delete from the cursor position
+                        val deleteCount = textBeforeCursor.length - partialStartIndex
+                        
+                        // Delete the partial text using deleteSurroundingText
+                        conn.deleteSurroundingText(deleteCount, 0)
+                        
+                        // Insert the new suggestion
+                        conn.commitText(suggestion, 1)
+                        
+                        // Update currentText to reflect the change
+                        currentText = textBeforeCursor.substring(0, partialStartIndex) + suggestion + textAfterCursor
+                    } else {
+                        // Fallback: replace all text before cursor
+                        conn.deleteSurroundingText(textBeforeCursor.length, 0)
+                        conn.commitText(suggestion, 1)
+                        currentText = suggestion + textAfterCursor
+                    }
+                } else {
+                    // Fallback: replace all text before cursor
+                    conn.deleteSurroundingText(textBeforeCursor.length, 0)
+                    conn.commitText(suggestion, 1)
+                    currentText = suggestion + textAfterCursor
+                }
+            }
+        } catch (e: Exception) {
+            println("Error replacing text with suggestion: ${e.message}")
+        }
+    }
+    
+    private fun findPartialTextInInput(text: String): String? {
+        // Find the last word or partial word that the user is typing
+        // This helps identify what to replace when selecting suggestions
+        val words = text.trim().split("\\s+".toRegex())
+        if (words.isNotEmpty()) {
+            val lastWord = words.last()
+            // If the last word is not empty and doesn't end with a space, it's partial
+            if (lastWord.isNotEmpty() && !text.endsWith(" ")) {
+                return lastWord
+            }
+        }
+        return null
+    }
+    
+    private fun replaceCurrentTextInInputField(newText: String) {
+        try {
+            val conn = inputConnection
+            if (conn != null) {
+                // Get the current text before cursor
+                val textBeforeCursor = conn.getTextBeforeCursor(1000, 0)?.toString() ?: ""
+                val textAfterCursor = conn.getTextAfterCursor(1000, 0)?.toString() ?: ""
+                
+                // Find the ENS name in the text before cursor
+                val ensName = findENSNameInText(textBeforeCursor)
+                if (ensName != null) {
+                    // Find the position of the ENS name in the text
+                    val ensStartIndex = textBeforeCursor.lastIndexOf(ensName)
+                    if (ensStartIndex != -1) {
+                        // Calculate how many characters to delete from the cursor position
+                        val deleteCount = textBeforeCursor.length - ensStartIndex
+                        
+                        // Delete the ENS name using deleteSurroundingText
+                        conn.deleteSurroundingText(deleteCount, 0)
+                        
+                        // Insert the new text
+                        conn.commitText(newText, 1)
+                        
+                        // Update currentText to reflect the change
+                        currentText = textBeforeCursor.substring(0, ensStartIndex) + newText + textAfterCursor
+                    } else {
+                        // Fallback: replace all text before cursor
+                        conn.deleteSurroundingText(textBeforeCursor.length, 0)
+                        conn.commitText(newText, 1)
+                        currentText = newText + textAfterCursor
+                    }
+                } else {
+                    // Fallback: replace all text before cursor
+                    conn.deleteSurroundingText(textBeforeCursor.length, 0)
+                    conn.commitText(newText, 1)
+                    currentText = newText + textAfterCursor
+                }
+            }
+        } catch (e: Exception) {
+            println("Error replacing current text: ${e.message}")
+        }
+    }
+    
+    private fun findENSNameInText(text: String): String? {
+        // Look for ENS names in the text (ending with .eth)
+        val ensPattern = Regex("\\b\\w+\\.eth\\b")
+        val matches = ensPattern.findAll(text)
+        return matches.lastOrNull()?.value
     }
     
     private fun switchToNextInputMethod() {
@@ -530,6 +661,124 @@ class FusionENSComposeKeyboard : InputMethodService() {
     override fun onDestroy() {
         super.onDestroy()
         toneGenerator?.release()
+    }
+    
+    private fun isInBrowserContext(): Boolean {
+        try {
+            val inputConnection = currentInputConnection
+            if (inputConnection != null) {
+                // Check the package name to see if we're in a browser
+                val packageName = packageName.lowercase()
+                val browserPackages = listOf(
+                    "com.android.chrome",
+                    "com.chrome.beta",
+                    "com.chrome.dev",
+                    "com.chrome.canary",
+                    "org.mozilla.firefox",
+                    "org.mozilla.firefox_beta",
+                    "org.mozilla.fenix",
+                    "com.microsoft.emmx",
+                    "com.opera.browser",
+                    "com.opera.browser.beta",
+                    "com.brave.browser",
+                    "com.duckduckgo.mobile.android",
+                    "com.vivaldi.browser",
+                    "com.samsung.android.app.sbrowser",
+                    "com.sec.android.app.sbrowser"
+                )
+
+                // Check if current package is a browser
+                if (browserPackages.any { packageName.contains(it) }) {
+                    return true
+                }
+            }
+        } catch (e: Exception) {
+            // Error checking browser context
+        }
+
+        return false
+    }
+    
+    private fun handleEnterKeyPress() {
+        // Check if we're in a browser context
+        if (isInBrowserContext()) {
+            // In browser context - try to resolve ENS before triggering enter
+            val inputText = extractInputFromAddressBar()
+            if (inputText.isNotEmpty() && ensResolver.isValidENS(inputText)) {
+                // Resolve ENS and then trigger enter
+                resolveENSForEnterKey(inputText)
+            } else {
+                // Not an ENS name, proceed with normal enter
+                currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+            }
+        } else {
+            // Not in browser context - proceed with normal enter
+            currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+        }
+    }
+    
+    private fun extractInputFromAddressBar(): String {
+        try {
+            val conn = currentInputConnection
+            if (conn != null) {
+                val beforeText = conn.getTextBeforeCursor(1000, 0)?.toString() ?: ""
+                val afterText = conn.getTextAfterCursor(1000, 0)?.toString() ?: ""
+                val fullText = beforeText + afterText
+                
+                // Extract the last word/input (similar to iOS implementation)
+                val words = fullText.trim().split("\\s+".toRegex())
+                return if (words.isNotEmpty()) words.last() else ""
+            }
+        } catch (e: Exception) {
+            // Fallback to current text
+        }
+        return currentText
+    }
+    
+    private fun resolveENSForEnterKey(inputText: String) {
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val resolvedValue = ensResolver.resolveENSName(inputText)
+                if (resolvedValue != null) {
+                    // Clear the address bar and insert the resolved URL
+                    clearAddressBarAndInsertURL(resolvedValue)
+                    
+                    // Trigger the enter key to navigate
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                    }, 200) // Small delay to ensure URL is inserted
+                } else {
+                    // If no resolution, proceed with normal enter
+                    currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                }
+            } catch (e: Exception) {
+                // If error, proceed with normal enter
+                currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+            }
+        }
+    }
+    
+    private fun clearAddressBarAndInsertURL(resolvedURL: String) {
+        try {
+            val conn = currentInputConnection
+            if (conn != null) {
+                val beforeText = conn.getTextBeforeCursor(1000, 0)?.toString() ?: ""
+                val afterText = conn.getTextAfterCursor(1000, 0)?.toString() ?: ""
+                val totalLength = beforeText.length + afterText.length
+                
+                // Delete all text in the address bar (with safety limit)
+                val maxDeletions = minOf(totalLength, 1000) // Safety limit
+                conn.deleteSurroundingText(maxDeletions, 0)
+                
+                // Insert the resolved URL
+                conn.commitText(resolvedURL, 1)
+                currentText = resolvedURL
+            }
+        } catch (e: Exception) {
+            // Fallback: just insert the URL
+            currentInputConnection?.commitText(resolvedURL, 1)
+            currentText = resolvedURL
+        }
     }
 }
 
