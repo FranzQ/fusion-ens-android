@@ -315,9 +315,9 @@ class FusionENSKeyboardService : InputMethodService() {
                 }
             }
         } else {
-            // Show empty bar when no suggestions
+            // Show empty bar when no suggestions - use space to maintain proper height
             val emptyText = TextView(this)
-            emptyText.text = "No suggestions"
+            emptyText.text = " "
             emptyText.setTextColor(getSecondaryTextColor())
             emptyText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             emptyText.setPadding(16, 16, 16, 16)
@@ -341,11 +341,18 @@ class FusionENSKeyboardService : InputMethodService() {
         val savedENS = getSavedENS()
         allSuggestions.addAll(savedENS)
         
-        // If user is typing, filter suggestions
+        // If user is typing, filter suggestions based on the last word
         if (currentText.isNotEmpty()) {
-            return allSuggestions.filter { ensName ->
-                ensName.lowercase().contains(currentText.lowercase())
-            }.distinct().take(10)
+            // Get the last word being typed (after the last space)
+            val words = currentText.trim().split("\\s+".toRegex())
+            val lastWord = if (words.isNotEmpty()) words.last() else ""
+            
+            // Only filter if the last word is not empty and not just spaces
+            if (lastWord.isNotEmpty()) {
+                return allSuggestions.filter { ensName ->
+                    ensName.lowercase().contains(lastWord.lowercase())
+                }.distinct().take(10)
+            }
         }
         
         // If not typing, show last 10 suggestions
@@ -470,12 +477,12 @@ class FusionENSKeyboardService : InputMethodService() {
                 
                 // Smart extraction: look for ENS patterns in the text
                 val ensPatterns = listOf(
-                    // Multi-chain ENS with .eth (e.g., "ses.eth:x", "vitalik.eth:btc")
-                    Regex("[a-zA-Z0-9-]+\\.eth:[a-zA-Z0-9]+"),
-                    // Multi-chain ENS shortcut (e.g., "ses:x", "vitalik:btc") 
-                    Regex("[a-zA-Z0-9-]+:[a-zA-Z0-9]+"),
-                    // Standard ENS (e.g., "vitalik.eth", "ses.eth")
-                    Regex("[a-zA-Z0-9-]+\\.eth")
+                    // Multi-chain ENS with .eth (e.g., "ses.eth:x", "vitalik.eth:btc", "jesse.base.eth:btc")
+                    Regex("([a-zA-Z0-9\\p{L}\\p{N}\\p{M}]([a-zA-Z0-9\\p{L}\\p{N}\\p{M}-.]*[a-zA-Z0-9\\p{L}\\p{N}\\p{M}])?)\\.eth:([a-zA-Z0-9]+)"),
+                    // Multi-chain ENS shortcut (e.g., "ses:x", "vitalik:btc", "jesse.base:btc") 
+                    Regex("([a-zA-Z0-9\\p{L}\\p{N}\\p{M}]([a-zA-Z0-9\\p{L}\\p{N}\\p{M}-.]*[a-zA-Z0-9\\p{L}\\p{N}\\p{M}])?):([a-zA-Z0-9]+)"),
+                    // Standard ENS (e.g., "vitalik.eth", "ses.eth", "jesse.base.eth")
+                    Regex("([a-zA-Z0-9\\p{L}\\p{N}\\p{M}]([a-zA-Z0-9\\p{L}\\p{N}\\p{M}-.]*[a-zA-Z0-9\\p{L}\\p{N}\\p{M}])?)\\.eth")
                 )
                 
                 // Find the first ENS pattern in the text
@@ -507,7 +514,6 @@ class FusionENSKeyboardService : InputMethodService() {
             }
         } catch (e: Exception) {
             // Log error and prevent crash
-            e.printStackTrace()
         }
     }
     
@@ -615,7 +621,6 @@ class FusionENSKeyboardService : InputMethodService() {
         }
         } catch (e: Exception) {
             // Log error and prevent crash
-            e.printStackTrace()
         }
     }
     
@@ -691,7 +696,6 @@ class FusionENSKeyboardService : InputMethodService() {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
     
@@ -914,8 +918,8 @@ class FusionENSKeyboardService : InputMethodService() {
                 // Single space press
                 inputConnection?.commitText(" ", 1)
                 currentText += " "
-                // Reset suggestions after space
-                resetSuggestionsToDefault()
+                // Refresh suggestions to show new word suggestions
+                refreshSuggestionBar()
             }
             lastSpacePressTime = currentTime
         }
@@ -924,6 +928,27 @@ class FusionENSKeyboardService : InputMethodService() {
         spaceButton.setOnLongClickListener {
             resolveCurrentTextAsENS()
             true // Consume the long press event
+        }
+        
+        // Add proper touch handling for spacebar to fix stuck pressed state
+        spaceButton.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    // Haptic feedback
+                    triggerHapticFeedback()
+                    
+                    // Key press animation
+                    animateKeyPress(spaceButton)
+                    
+                    // Key sound
+                    playKeySound()
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    // Key release animation
+                    animateKeyRelease(spaceButton)
+                }
+            }
+            false // Don't consume the event - let click listeners work
         }
         row.addView(spaceButton)
 
@@ -1578,7 +1603,9 @@ class FusionENSKeyboardService : InputMethodService() {
         if (button.text == ".eth") {
             drawable.setColor(Color.parseColor("#0066A0")) // Darker blue when pressed
         } else {
-            drawable.setColor(Color.parseColor("#5A5A5A")) // Lighter when pressed
+            // Use a darker version of the current theme's key color
+            val pressedColor = if (isDarkMode) Color.parseColor("#5A5A5A") else Color.parseColor("#C0C0C0")
+            drawable.setColor(pressedColor)
         }
     }
     
@@ -1598,7 +1625,7 @@ class FusionENSKeyboardService : InputMethodService() {
         if (button.text == ".eth") {
             drawable.setColor(Color.parseColor("#0080BC")) // Original blue color
         } else {
-            drawable.setColor(Color.parseColor("#4A4A4A")) // Original gray color
+            drawable.setColor(getKeyColor()) // Use dynamic color based on theme
         }
     }
     
@@ -1662,12 +1689,12 @@ class FusionENSKeyboardService : InputMethodService() {
                 // Smart extraction: look for ENS patterns in the text
                 // This handles cases like "hi there ses.eth:x" -> extracts "ses.eth:x"
                 val ensPatterns = listOf(
-                    // Multi-chain ENS with .eth (e.g., "ses.eth:x", "vitalik.eth:btc")
-                    Regex("[a-zA-Z0-9-]+\\.eth:[a-zA-Z0-9]+"),
-                    // Multi-chain ENS shortcut (e.g., "ses:x", "vitalik:btc") 
-                    Regex("[a-zA-Z0-9-]+:[a-zA-Z0-9]+"),
-                    // Standard ENS (e.g., "vitalik.eth", "ses.eth")
-                    Regex("[a-zA-Z0-9-]+\\.eth")
+                    // Multi-chain ENS with .eth (e.g., "ses.eth:x", "vitalik.eth:btc", "jesse.base.eth:btc")
+                    Regex("([a-zA-Z0-9\\p{L}\\p{N}\\p{M}]([a-zA-Z0-9\\p{L}\\p{N}\\p{M}-.]*[a-zA-Z0-9\\p{L}\\p{N}\\p{M}])?)\\.eth:([a-zA-Z0-9]+)"),
+                    // Multi-chain ENS shortcut (e.g., "ses:x", "vitalik:btc", "jesse.base:btc") 
+                    Regex("([a-zA-Z0-9\\p{L}\\p{N}\\p{M}]([a-zA-Z0-9\\p{L}\\p{N}\\p{M}-.]*[a-zA-Z0-9\\p{L}\\p{N}\\p{M}])?):([a-zA-Z0-9]+)"),
+                    // Standard ENS (e.g., "vitalik.eth", "ses.eth", "jesse.base.eth")
+                    Regex("([a-zA-Z0-9\\p{L}\\p{N}\\p{M}]([a-zA-Z0-9\\p{L}\\p{N}\\p{M}-.]*[a-zA-Z0-9\\p{L}\\p{N}\\p{M}])?)\\.eth")
                 )
                 
                 // Find the first ENS pattern in the text
@@ -1685,7 +1712,6 @@ class FusionENSKeyboardService : InputMethodService() {
                 return result
             }
         } catch (e: Exception) {
-            e.printStackTrace()
         }
         return currentText
     }
