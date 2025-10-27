@@ -8,16 +8,16 @@
     <color name="ens_secondary_light">#CEE1E8</color>
     <color name="ens_category_text">#093C52</color>
     
-    <!-- Material Design Colors for Light Mode -->
+    <!-- Material Design Colors for Dark Mode -->
     <color name="colorPrimary">#0080BC</color>
     <color name="colorOnPrimary">#FFFFFF</color>
     <color name="colorSecondary">#CEE1E8</color>
     <color name="colorOnSecondary">#011A25</color>
-    <color name="colorSurface">#FFFFFF</color>
-    <color name="colorOnSurface">#000000</color>
-    <color name="colorSurfaceVariant">#F5F5F5</color>
-    <color name="colorOnSurfaceVariant">#616161</color>
-    <color name="colorOutline">#BDBDBD</color>
+    <color name="colorSurface">#121212</color>
+    <color name="colorOnSurface">#FFFFFF</color>
+    <color name="colorSurfaceVariant">#1E1E1E</color>
+    <color name="colorOnSurfaceVariant">#B3B3B3</color>
+    <color name="colorOutline">#4A4A4A</color>
     <color name="colorError">#F44336</color>
     <color name="colorOnError">#FFFFFF</color>
     
@@ -28,10 +28,10 @@
     <!-- Neutral Colors -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="grey_100">#FFF5F5F5</color>
-    <color name="grey_200">#FFEEEEEE</color>
-    <color name="grey_300">#FFE0E0E0</color>
-    <color name="grey_400">#FFBDBDBD</color>
-    <color name="grey_700">#FF616161</color>
-    <color name="grey_800">#FF424242</color>
+    <color name="grey_100">#FF1E1E1E</color>
+    <color name="grey_200">#FF2D2D2D</color>
+    <color name="grey_300">#FF3C3C3C</color>
+    <color name="grey_400">#FF4A4A4A</color>
+    <color name="grey_700">#FF9E9E9E</color>
+    <color name="grey_800">#FF121212</color>
 </resources>

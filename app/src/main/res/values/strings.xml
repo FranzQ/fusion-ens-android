@@ -1,3 +1,20 @@
 <resources>
     <string name="app_name">Fusion ENS</string>
+    
+    <!-- Browser Action Options -->
+    <string-array name="browser_action_entries">
+        <item>Etherscan</item>
+        <item>OpenSea</item>
+        <item>URL</item>
+        <item>GitHub</item>
+        <item>X (Twitter)</item>
+    </string-array>
+    
+    <string-array name="browser_action_values">
+        <item>etherscan</item>
+        <item>opensea</item>
+        <item>url</item>
+        <item>github</item>
+        <item>x</item>
+    </string-array>
 </resources>

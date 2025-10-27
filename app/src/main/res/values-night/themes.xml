@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Settings-specific theme for dark mode -->
+    <style name="Theme.FusionENS.Settings" parent="Theme.Material3.DayNight">
+        <!-- Preference Category Text Color for dark mode -->
+        <item name="android:textColorSecondary">@color/ens_category_text</item>
+    </style>
+</resources>

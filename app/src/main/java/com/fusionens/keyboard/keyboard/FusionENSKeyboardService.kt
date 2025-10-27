@@ -10,7 +10,6 @@ import android.widget.*
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
-import android.util.Log
 import android.view.Gravity
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
@@ -21,6 +20,8 @@ import android.os.Vibrator
 import android.os.Build
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.view.MotionEvent
@@ -32,7 +33,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.sqrt
 import kotlin.math.pow
-import android.content.SharedPreferences
 
 class FusionENSKeyboardService : InputMethodService() {
     
@@ -61,6 +61,9 @@ class FusionENSKeyboardService : InputMethodService() {
     // SharedPreferences for saving resolved ENS names
     private lateinit var prefs: SharedPreferences
     
+    // Theme support
+    private var isDarkMode = true
+    
     // Popular ENS names (like iOS keyboard)
     private val popularENS = listOf("vitalik.eth", "ethereum.eth", "uniswap.eth", "opensea.eth", "ens.eth")
     
@@ -87,6 +90,9 @@ class FusionENSKeyboardService : InputMethodService() {
         // Initialize SharedPreferences first
         prefs = getSharedPreferences("fusion_ens_keyboard", Context.MODE_PRIVATE)
         
+        // Detect system theme
+        detectSystemTheme()
+        
         // Initialize enhanced features
         initializeEnhancedFeatures()
         
@@ -95,7 +101,7 @@ class FusionENSKeyboardService : InputMethodService() {
         
         val layout = LinearLayout(this)
         layout.orientation = LinearLayout.VERTICAL
-        layout.setBackgroundColor(Color.parseColor("#2C2C2C")) // Gboard-like background
+        layout.setBackgroundColor(getBackgroundColor()) // Dynamic background based on theme
         
         // Set layout to fill available space
         layout.layoutParams = ViewGroup.LayoutParams(
@@ -107,6 +113,31 @@ class FusionENSKeyboardService : InputMethodService() {
         createKeyboard(layout)
         
         return layout
+    }
+    
+    private fun detectSystemTheme() {
+        val nightModeFlags = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        isDarkMode = nightModeFlags == Configuration.UI_MODE_NIGHT_YES
+    }
+    
+    private fun getBackgroundColor(): Int {
+        return if (isDarkMode) Color.parseColor("#2C2C2C") else Color.parseColor("#F5F5F5")
+    }
+    
+    private fun getKeyColor(): Int {
+        return if (isDarkMode) Color.parseColor("#4A4A4A") else Color.parseColor("#E0E0E0")
+    }
+    
+    private fun getFunctionKeyColor(): Int {
+        return if (isDarkMode) Color.parseColor("#3A3A3A") else Color.parseColor("#D0D0D0")
+    }
+    
+    private fun getTextColor(): Int {
+        return if (isDarkMode) Color.parseColor("#FFFFFF") else Color.parseColor("#000000")
+    }
+    
+    private fun getSecondaryTextColor(): Int {
+        return if (isDarkMode) Color.parseColor("#666666") else Color.parseColor("#666666")
     }
     
     private fun initializeEnhancedFeatures() {
@@ -178,7 +209,7 @@ class FusionENSKeyboardService : InputMethodService() {
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         row.setPadding(8, 4, 8, 4)
-        row.setBackgroundColor(Color.parseColor("#2C2C2C"))
+        row.setBackgroundColor(getBackgroundColor())
         
         // Common word suggestions (like Gboard)
         val suggestions = listOf("the", "and", "you", "that", "was")
@@ -199,7 +230,7 @@ class FusionENSKeyboardService : InputMethodService() {
     private fun createSuggestionChip(text: String, isENS: Boolean = false): TextView {
         val button = TextView(this)
         button.text = text
-        button.setTextColor(Color.parseColor("#0080BC")) // Blue text color for ENS suggestions
+        button.setTextColor(Color.parseColor("#0080BC")) // ENS blue color for suggestions
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
         button.setPadding(16, 16, 16, 16) // Increased padding for taller suggestion bar
 
@@ -219,7 +250,7 @@ class FusionENSKeyboardService : InputMethodService() {
     private fun createSuggestionButton(text: String): TextView {
         val button = TextView(this)
         button.text = text
-        button.setTextColor(Color.parseColor("#FFFFFF"))
+        button.setTextColor(getTextColor())
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
         button.setPadding(12, 8, 12, 8)
         
@@ -243,7 +274,7 @@ class FusionENSKeyboardService : InputMethodService() {
         // Create a container for the scrollable suggestion bar
         val container = LinearLayout(this)
         container.orientation = LinearLayout.VERTICAL
-        container.setBackgroundColor(Color.parseColor("#2C2C2C"))
+        container.setBackgroundColor(getBackgroundColor())
         
         // Create horizontal scroll view
         val scrollView = HorizontalScrollView(this)
@@ -277,7 +308,7 @@ class FusionENSKeyboardService : InputMethodService() {
                 if (index < suggestions.size - 1) {
                     val separator = TextView(this)
                     separator.text = "|"
-                    separator.setTextColor(Color.parseColor("#666666"))
+                    separator.setTextColor(getSecondaryTextColor())
                     separator.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
                     separator.setPadding(8, 8, 8, 8)
                     row.addView(separator)
@@ -287,7 +318,7 @@ class FusionENSKeyboardService : InputMethodService() {
             // Show empty bar when no suggestions
             val emptyText = TextView(this)
             emptyText.text = "No suggestions"
-            emptyText.setTextColor(Color.parseColor("#666666"))
+            emptyText.setTextColor(getSecondaryTextColor())
             emptyText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             emptyText.setPadding(16, 16, 16, 16)
             row.addView(emptyText)
@@ -372,7 +403,6 @@ class FusionENSKeyboardService : InputMethodService() {
             CoroutineScope(Dispatchers.IO).launch {
                 val address = ensResolver.resolveENSName(text)
                 if (address != null) {
-                    println("ENS Resolved: $text -> $address")
                     // Replace the ENS name with the resolved address
                     withContext(Dispatchers.Main) {
                         replaceCurrentTextInInputField(address)
@@ -422,7 +452,6 @@ class FusionENSKeyboardService : InputMethodService() {
                 }
             }
         } catch (e: Exception) {
-            println("Error replacing text with suggestion: ${e.message}")
         }
     }
     
@@ -435,9 +464,6 @@ class FusionENSKeyboardService : InputMethodService() {
                 val afterText = inputConnection.getTextAfterCursor(1000, 0)?.toString() ?: ""
                 val fullText = beforeText + afterText
                 
-                println("resolveCurrentTextAsENS: beforeText = '$beforeText'")
-                println("resolveCurrentTextAsENS: afterText = '$afterText'")
-                println("resolveCurrentTextAsENS: fullText = '$fullText'")
                 
                 // Use the same smart extraction logic as extractInputFromAddressBar
                 val trimmedText = fullText.trim()
@@ -457,7 +483,6 @@ class FusionENSKeyboardService : InputMethodService() {
                     val match = pattern.find(trimmedText)
                     if (match != null) {
                         val ensName = match.value
-                        println("resolveCurrentTextAsENS: found ENS pattern '$ensName'")
                         
                         // For spacebar long press, always just replace text (don't navigate)
                         // This is different from Enter key which should navigate in browser context
@@ -469,25 +494,19 @@ class FusionENSKeyboardService : InputMethodService() {
                 // If no ENS pattern found, try the last word (for backward compatibility)
                 val words = trimmedText.split("\\s+".toRegex())
                 val lastWord = if (words.isNotEmpty()) words.last() else trimmedText
-                println("resolveCurrentTextAsENS: no ENS pattern found, trying last word: '$lastWord'")
                 
                 if (ensResolver.isValidENS(lastWord)) {
-                    println("resolveCurrentTextAsENS: lastWord is valid ENS")
                     val ensName = ensResolver.getENSNameFromText(lastWord)
-                    println("resolveCurrentTextAsENS: extracted ensName = '$ensName'")
                     if (ensName != null) {
                         // For spacebar long press, always just replace text (don't navigate)
                         resolveENSAndReplace(ensName)
                     }
                 } else {
-                    println("resolveCurrentTextAsENS: no valid ENS found in text")
                 }
             } else {
-                println("resolveCurrentTextAsENS: inputConnection is null")
             }
         } catch (e: Exception) {
             // Log error and prevent crash
-            println("Error in resolveCurrentTextAsENS: ${e.message}")
             e.printStackTrace()
         }
     }
@@ -496,7 +515,6 @@ class FusionENSKeyboardService : InputMethodService() {
         try {
             // Get the package name of the app that's using the keyboard
             val currentPackageName = currentInputEditorInfo?.packageName?.lowercase()
-            println("isInBrowserContext: current package = '$currentPackageName'")
             
             val browserPackages = listOf(
                 "com.android.chrome",
@@ -520,7 +538,6 @@ class FusionENSKeyboardService : InputMethodService() {
             val isBrowser = currentPackageName?.let { packageName ->
                 browserPackages.any { packageName.contains(it) }
             } ?: false
-            println("isInBrowserContext: isBrowser = $isBrowser")
             
             if (isBrowser) {
                 return true
@@ -530,7 +547,6 @@ class FusionENSKeyboardService : InputMethodService() {
             // Note: We can't easily detect address bar input type from InputConnection
             // So we rely mainly on package name detection for browser context
         } catch (e: Exception) {
-            println("Error checking browser context: ${e.message}")
         }
 
         return false
@@ -599,35 +615,29 @@ class FusionENSKeyboardService : InputMethodService() {
         }
         } catch (e: Exception) {
             // Log error and prevent crash
-            println("Error in handleBrowserENSResolution: ${e.message}")
             e.printStackTrace()
         }
     }
     
     private fun resolveENSAndReplace(ensName: String) {
-        println("resolveENSAndReplace: resolving ensName = '$ensName'")
         CoroutineScope(Dispatchers.Main).launch {
             val resolvedValue = ensResolver.resolveENSName(ensName)
-            println("resolveENSAndReplace: resolved value = '$resolvedValue'")
             if (resolvedValue != null) {
                 // Check if we're in browser context
                 if (isInBrowserContext()) {
                     // In browser context - check if this is a text record (URL) or an address
                     if (resolvedValue.startsWith("http://") || resolvedValue.startsWith("https://")) {
                         // This is a text record resolved to a URL - open it
-                        println("resolveENSAndReplace: Opening URL: $resolvedValue")
                         openURL(resolvedValue)
                         saveENSName(ensName)
                     } else {
                         // This is an address - replace only the ENS name
-                        println("resolveENSAndReplace: Replacing ENS name with address: $resolvedValue")
                         replaceENSNameInText(ensName, resolvedValue)
                         saveENSName(ensName)
                     }
                 } else {
                     // Not in browser context - always replace only the ENS name (never open URLs)
                     // This matches iOS behavior: text records resolve to addresses in regular text fields
-                    println("resolveENSAndReplace: Replacing ENS name with resolved value: $resolvedValue")
                     replaceENSNameInText(ensName, resolvedValue)
                     saveENSName(ensName)
                 }
@@ -635,7 +645,6 @@ class FusionENSKeyboardService : InputMethodService() {
                 // Show feedback
                 triggerHapticFeedback()
             } else {
-                println("resolveENSAndReplace: no value resolved for '$ensName'")
             }
         }
     }
@@ -649,8 +658,6 @@ class FusionENSKeyboardService : InputMethodService() {
                 val afterText = inputConnection.getTextAfterCursor(1000, 0)?.toString() ?: ""
                 val fullText = beforeText + afterText
                 
-                println("replaceENSNameInText: fullText = '$fullText'")
-                println("replaceENSNameInText: replacing '$ensName' with '$resolvedValue'")
                 
                 // Find the ENS name in the complete text
                 val ensNameIndex = fullText.indexOf(ensName)
@@ -660,8 +667,6 @@ class FusionENSKeyboardService : InputMethodService() {
                     val ensNameStart = ensNameIndex
                     val ensNameEnd = ensNameIndex + ensName.length
                     
-                    println("replaceENSNameInText: cursorPosition = $cursorPosition")
-                    println("replaceENSNameInText: ensNameStart = $ensNameStart, ensNameEnd = $ensNameEnd")
                     
                     // Move cursor to the start of the ENS name
                     val moveToStart = ensNameStart - cursorPosition
@@ -678,9 +683,7 @@ class FusionENSKeyboardService : InputMethodService() {
                     // Update current text
                     val newText = fullText.substring(0, ensNameStart) + resolvedValue + fullText.substring(ensNameEnd)
                     currentText = newText
-                    println("replaceENSNameInText: new text = '$newText'")
                 } else {
-                    println("replaceENSNameInText: ENS name '$ensName' not found in text")
                     // Fallback: replace all text before cursor
                     inputConnection.deleteSurroundingText(beforeText.length, 0)
                     inputConnection.commitText(resolvedValue, 1)
@@ -688,7 +691,6 @@ class FusionENSKeyboardService : InputMethodService() {
                 }
             }
         } catch (e: Exception) {
-            println("Error replacing ENS name in text: ${e.message}")
             e.printStackTrace()
         }
     }
@@ -732,7 +734,6 @@ class FusionENSKeyboardService : InputMethodService() {
                 }
             }
         } catch (e: Exception) {
-            println("Error replacing current text: ${e.message}")
         }
     }
     
@@ -742,7 +743,6 @@ class FusionENSKeyboardService : InputMethodService() {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         } catch (e: Exception) {
-            println("Error opening Etherscan: ${e.message}")
         }
     }
     
@@ -753,7 +753,6 @@ class FusionENSKeyboardService : InputMethodService() {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         } catch (e: Exception) {
-            println("Error opening URL: ${e.message}")
         }
     }
     
@@ -763,7 +762,6 @@ class FusionENSKeyboardService : InputMethodService() {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         } catch (e: Exception) {
-            println("Error opening GitHub: ${e.message}")
         }
     }
     
@@ -773,7 +771,6 @@ class FusionENSKeyboardService : InputMethodService() {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         } catch (e: Exception) {
-            println("Error opening Twitter: ${e.message}")
         }
     }
     
@@ -784,7 +781,7 @@ class FusionENSKeyboardService : InputMethodService() {
         
         // Q-P keys only (no backspace like Gboard)
         letterKeys[0].forEach { key ->
-            val button = createKeyButtonWithSuperscript(key, Color.parseColor("#4A4A4A"))
+            val button = createKeyButtonWithSuperscript(key, getKeyColor())
             button.setOnClickListener { onKeyPress(key) }
             row.addView(button)
         }
@@ -799,7 +796,7 @@ class FusionENSKeyboardService : InputMethodService() {
         
         // A-L keys only (no tab key like Gboard)
         letterKeys[1].forEachIndexed { index, key ->
-            val button = createKeyButton(key, Color.parseColor("#4A4A4A"))
+            val button = createKeyButton(key, getKeyColor())
             button.setOnClickListener { onKeyPress(key) }
             
             // Add left margin to first key to offset the row
@@ -828,7 +825,7 @@ class FusionENSKeyboardService : InputMethodService() {
         row.setPadding(8, 2, 8, 2) // Reduced vertical padding to eliminate gap
         
         // Left shift key
-        val leftShiftButton = createKeyButton("⇧", Color.parseColor("#3A3A3A"), 1.5f)
+        val leftShiftButton = createKeyButton("⇧", getFunctionKeyColor(), 1.5f)
         leftShiftButton.setOnClickListener { 
             isShiftPressed = !isShiftPressed
             recreateKeyboard()
@@ -837,7 +834,7 @@ class FusionENSKeyboardService : InputMethodService() {
         
         // Z-M keys (offset to the right of A-L row)
         letterKeys[2].forEachIndexed { index, key ->
-            val button = createKeyButton(key, Color.parseColor("#4A4A4A"))
+            val button = createKeyButton(key, getKeyColor())
             button.setOnClickListener { onKeyPress(key) }
             
             // Add left margin to first key to offset the row further
@@ -851,7 +848,7 @@ class FusionENSKeyboardService : InputMethodService() {
         }
         
         // Backspace key (like Gboard)
-        val backspaceButton = createKeyButton("⌫", Color.parseColor("#3A3A3A"), 1.5f)
+        val backspaceButton = createKeyButton("⌫", getFunctionKeyColor(), 1.5f)
         backspaceButton.setOnClickListener { 
             inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
             // Update current text and refresh suggestions
@@ -872,7 +869,7 @@ class FusionENSKeyboardService : InputMethodService() {
         
         // Numbers/Symbols toggle (left) - smaller font to prevent line break
         val toggleText = if (isNumbersMode || isSymbolsMode) "ABC" else "?123"
-        val toggleButton = createKeyButton(toggleText, Color.parseColor("#3A3A3A"), 1.2f)
+        val toggleButton = createKeyButton(toggleText, getFunctionKeyColor(), 1.2f)
         toggleButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f) // Smaller font for ?123
         toggleButton.setOnClickListener { 
             isNumbersMode = !isNumbersMode
@@ -883,7 +880,7 @@ class FusionENSKeyboardService : InputMethodService() {
         
         // .eth button (replacing emoji) with long-press menu
         val ethButton = createKeyButton(".eth", Color.parseColor("#0080BC"), 1f)
-        ethButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f) // Smaller font for .eth
+        ethButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f) // Larger font for better readability
         ethButton.setOnClickListener { 
             inputConnection?.commitText(".eth", 1)
             currentText += ".eth"
@@ -895,15 +892,16 @@ class FusionENSKeyboardService : InputMethodService() {
         row.addView(ethButton)
         
         // Globe icon for keyboard switching
-        val globeButton = createKeyButton("🌐", Color.parseColor("#3A3A3A"), 1f)
-        globeButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f) // Smaller font for globe
+        val globeButton = createKeyButton("🌐", getFunctionKeyColor(), 1f)
+        globeButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f) // Larger font for better readability
         globeButton.setOnClickListener { 
             switchToNextInputMethod()
         }
         row.addView(globeButton)
         
         // Space bar (wider like Gboard)
-        val spaceButton = createKeyButton("", Color.parseColor("#4A4A4A"), 4f)
+        val spaceButton = createKeyButton("", getKeyColor(), 4f)
+        spaceButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f) // Consistent font size with other bottom row keys
         spaceButton.setOnClickListener { 
             val currentTime = System.currentTimeMillis()
             if (currentTime - lastSpacePressTime < 500) {
@@ -931,7 +929,7 @@ class FusionENSKeyboardService : InputMethodService() {
 
         // :btc key (crypto ticker) - between space and period
         val btcButton = createKeyButton(":btc", Color.parseColor("#FF9500"), 1f) // Orange color like iOS
-        btcButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f) // Smaller font
+        btcButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f) // Larger font for better readability
         // Ensure the button maintains its orange color after press
         btcButton.setOnTouchListener { _, event ->
             when (event.action) {
@@ -959,12 +957,14 @@ class FusionENSKeyboardService : InputMethodService() {
         row.addView(btcButton)
 
         // Period key (like Gboard)
-        val periodButton = createKeyButton(".", Color.parseColor("#4A4A4A"), 1f)
+        val periodButton = createKeyButton(".", getKeyColor(), 1f)
+        periodButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f) // Larger font for better readability
         periodButton.setOnClickListener { onKeyPress(".") }
         row.addView(periodButton)
         
         // Enter key (right side)
-        val enterButton = createKeyButton("⏎", Color.parseColor("#3A3A3A"), 1.2f)
+        val enterButton = createKeyButton("⏎", getFunctionKeyColor(), 1.2f)
+        enterButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f) // Larger font for better readability
         enterButton.setOnClickListener { 
             handleEnterKeyPress()
         }
@@ -980,7 +980,7 @@ class FusionENSKeyboardService : InputMethodService() {
         
         // Numbers 1-0
         numberKeys[0].forEach { key ->
-            val button = createKeyButton(key, Color.parseColor("#4A4A4A"))
+            val button = createKeyButton(key, getKeyColor())
             button.setOnClickListener { onKeyPress(key) }
             row.addView(button)
         }
@@ -995,7 +995,7 @@ class FusionENSKeyboardService : InputMethodService() {
         
         // Symbols row
         numberKeys[1].forEach { key ->
-            val button = createKeyButton(key, Color.parseColor("#4A4A4A"))
+            val button = createKeyButton(key, getKeyColor())
             button.setOnClickListener { onKeyPress(key) }
             row.addView(button)
         }
@@ -1010,7 +1010,7 @@ class FusionENSKeyboardService : InputMethodService() {
         
         // More symbols
         numberKeys[2].forEach { key ->
-            val button = createKeyButton(key, Color.parseColor("#4A4A4A"))
+            val button = createKeyButton(key, getKeyColor())
             button.setOnClickListener { onKeyPress(key) }
             row.addView(button)
         }
@@ -1022,7 +1022,7 @@ class FusionENSKeyboardService : InputMethodService() {
     private fun createKeyButton(text: String, backgroundColor: Int, weight: Float = 1f): Button {
         val button = Button(this)
         button.text = if (isShiftPressed && text.length == 1 && !isNumbersMode) text.uppercase() else text.lowercase()
-        button.setTextColor(Color.parseColor("#FFFFFF"))
+        button.setTextColor(getTextColor())
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f) // Larger text
         button.typeface = android.graphics.Typeface.DEFAULT_BOLD
         
@@ -1073,7 +1073,7 @@ class FusionENSKeyboardService : InputMethodService() {
         val displayText = if (isShiftPressed && text.length == 1 && !isNumbersMode) text.uppercase() else text.lowercase()
 
         button.text = displayText
-        button.setTextColor(Color.parseColor("#FFFFFF"))
+        button.setTextColor(getTextColor())
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f) // Larger text
         button.typeface = android.graphics.Typeface.DEFAULT_BOLD
 
@@ -1147,7 +1147,7 @@ class FusionENSKeyboardService : InputMethodService() {
         }
         
         button.text = displayText
-        button.setTextColor(Color.parseColor("#FFFFFF"))
+        button.setTextColor(getTextColor())
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f) // Slightly larger for better readability
         button.typeface = android.graphics.Typeface.DEFAULT_BOLD
         
@@ -1196,10 +1196,8 @@ class FusionENSKeyboardService : InputMethodService() {
     }
     
     private fun handleEnterKeyPress() {
-        println("handleEnterKeyPress: Enter key pressed")
         // Check if we're in a browser context
         val isBrowser = isInBrowserContext()
-        println("handleEnterKeyPress: isInBrowserContext = $isBrowser")
         
         if (isBrowser) {
             // In browser context - try to resolve ENS before triggering enter
@@ -1211,7 +1209,6 @@ class FusionENSKeyboardService : InputMethodService() {
                 val fullText = beforeText + afterText
                 val trimmedFullText = fullText.trim()
                 
-                println("handleEnterKeyPress: fullText = '$trimmedFullText'")
                 
                 // Check if the FULL input is ONLY an ENS name (not part of a sentence)
                 val isOnlyENS = trimmedFullText.isNotEmpty() && 
@@ -1219,14 +1216,12 @@ class FusionENSKeyboardService : InputMethodService() {
                                !trimmedFullText.contains(" ") // No spaces = only ENS name
                 
                 if (isOnlyENS) {
-                    println("handleEnterKeyPress: Full input is only ENS name, resolving...")
                     // Show loading state on enter button
                     updateEnterButtonToLoading()
                     
                     // Resolve ENS and then trigger enter
                     resolveENSForEnterKey(trimmedFullText)
                 } else {
-                    println("handleEnterKeyPress: Full input contains other text or is not ENS, proceeding with normal enter")
                     // Not only an ENS name, proceed with normal enter
                     inputConnection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
                 }
@@ -1235,7 +1230,6 @@ class FusionENSKeyboardService : InputMethodService() {
                 inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
             }
         } else {
-            println("handleEnterKeyPress: Not in browser context, proceeding with normal enter")
             // Not in browser context - proceed with normal enter
             inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
         }
@@ -1273,11 +1267,8 @@ class FusionENSKeyboardService : InputMethodService() {
     private fun checkForSelectedText() {
         // Check if there's selected text and if it's an ENS name
         val selectedText = getSelectedText()
-        println("Selection check: selectedText = '$selectedText'")
         if (selectedText != null && selectedText != lastResolvedText) {
-            println("Selection check: isValidENS = ${ensResolver.isValidENS(selectedText)}")
             if (ensResolver.isValidENS(selectedText)) {
-                println("Selection check: Resolving ENS name: $selectedText")
                 resolveSelectedENS(selectedText)
             }
         }
@@ -1288,14 +1279,11 @@ class FusionENSKeyboardService : InputMethodService() {
             val inputConnection = currentInputConnection
             if (inputConnection != null) {
                 val selectedText = inputConnection.getSelectedText(0)
-                println("getSelectedText: inputConnection exists, selectedText = '$selectedText'")
                 selectedText?.toString()
             } else {
-                println("getSelectedText: inputConnection is null")
                 null
             }
         } catch (e: Exception) {
-            println("getSelectedText: Exception = ${e.message}")
             null
         }
     }
@@ -1312,20 +1300,16 @@ class FusionENSKeyboardService : InputMethodService() {
         lastResolvedText = selectedText // Track what we're resolving
         
         val ensName = selectedText.trim()
-        println("resolveSelectedENS: resolving selectedText = '$ensName'")
         
         // For highlighting/selection, always just replace text (don't navigate)
         // This is different from Enter key which should navigate in browser context
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val resolvedValue = ensResolver.resolveENSName(ensName)
-                println("resolveSelectedENS: resolved value = '$resolvedValue'")
                 if (resolvedValue != null) {
-                    println("ENS Resolution Success: $ensName -> $resolvedValue")
                     
                     // Always replace text (never open URLs) for highlighting/selection
                     // This matches iOS behavior: text records resolve to addresses in regular text fields
-                    println("resolveSelectedENS: Replacing text with resolved value: $resolvedValue")
                     withContext(Dispatchers.Main) {
                         replaceSelectedText(resolvedValue)
                         saveENSName(ensName)
@@ -1337,7 +1321,6 @@ class FusionENSKeyboardService : InputMethodService() {
                         }, 2000)
                     }
                 } else {
-                    println("ENS Resolution Error: $ensName not found")
                     withContext(Dispatchers.Main) {
                         showENSResolutionError(ensName)
                         // Clear the resolved text even on error
@@ -1345,7 +1328,6 @@ class FusionENSKeyboardService : InputMethodService() {
                     }
                 }
             } catch (e: Exception) {
-                println("ENS Resolution error: ${e.message}")
                 withContext(Dispatchers.Main) {
                     showENSResolutionError(ensName)
                     // Clear the resolved text even on error
@@ -1363,19 +1345,16 @@ class FusionENSKeyboardService : InputMethodService() {
                 inputConnection.commitText(newText, 1)
             }
         } catch (e: Exception) {
-            println("Error replacing selected text: ${e.message}")
         }
     }
     
     private fun showENSResolutionFeedback(ensName: String, address: String) {
         // For now, just log the resolution - we can add visual feedback later
-        println("ENS Resolution Success: $ensName -> $address")
         // TODO: Add visual feedback in suggestion bar
     }
     
     private fun showENSResolutionError(ensName: String) {
         // For now, just log the error - we can add visual feedback later
-        println("ENS Resolution Error: $ensName not found")
         // TODO: Add visual feedback in suggestion bar
     }
     
@@ -1423,7 +1402,7 @@ class FusionENSKeyboardService : InputMethodService() {
     private fun createSubdomainButton(text: String): Button {
         val button = Button(this)
         button.text = text
-        button.setTextColor(Color.parseColor("#FFFFFF"))
+        button.setTextColor(getTextColor())
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
         button.setPadding(12, 8, 12, 8)
         
@@ -1510,7 +1489,7 @@ class FusionENSKeyboardService : InputMethodService() {
     private fun createCryptoTickerButton(text: String): Button {
         val button = Button(this)
         button.text = text
-        button.setTextColor(Color.parseColor("#FFFFFF"))
+        button.setTextColor(getTextColor())
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
         button.setPadding(12, 8, 12, 8)
         
@@ -1547,7 +1526,6 @@ class FusionENSKeyboardService : InputMethodService() {
             val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
             imm.showInputMethodPicker()
         } catch (e: Exception) {
-            Log.e("FusionENS", "Failed to switch input method", e)
         }
     }
     
@@ -1678,12 +1656,8 @@ class FusionENSKeyboardService : InputMethodService() {
                 val afterText = inputConnection.getTextAfterCursor(1000, 0)?.toString() ?: ""
                 val fullText = beforeText + afterText
                 
-                println("extractInputFromAddressBar: beforeText = '$beforeText' (${beforeText.length})")
-                println("extractInputFromAddressBar: afterText = '$afterText' (${afterText.length})")
-                println("extractInputFromAddressBar: fullText = '$fullText'")
                 
                 val trimmedText = fullText.trim()
-                println("extractInputFromAddressBar: trimmedText = '$trimmedText'")
                 
                 // Smart extraction: look for ENS patterns in the text
                 // This handles cases like "hi there ses.eth:x" -> extracts "ses.eth:x"
@@ -1701,7 +1675,6 @@ class FusionENSKeyboardService : InputMethodService() {
                     val match = pattern.find(trimmedText)
                     if (match != null) {
                         val ensName = match.value
-                        println("extractInputFromAddressBar: found ENS pattern '$ensName'")
                         return ensName
                     }
                 }
@@ -1709,14 +1682,11 @@ class FusionENSKeyboardService : InputMethodService() {
                 // If no ENS pattern found, return the last word (for backward compatibility)
                 val words = trimmedText.split("\\s+".toRegex())
                 val result = if (words.isNotEmpty()) words.last() else trimmedText
-                println("extractInputFromAddressBar: no ENS pattern found, using last word: '$result'")
                 return result
             }
         } catch (e: Exception) {
-            println("extractInputFromAddressBar: error = ${e.message}")
             e.printStackTrace()
         }
-        println("extractInputFromAddressBar: final fallback to currentText = '$currentText'")
         return currentText
     }
     
@@ -1727,7 +1697,6 @@ class FusionENSKeyboardService : InputMethodService() {
     }
     
     private fun resolveENSForEnterKey(inputText: String) {
-        println("resolveENSForEnterKey: resolving inputText = '$inputText'")
         
         // Check if this is a text record (like ses.eth:x) or a standard ENS name (like ses.eth)
         if (inputText.contains(":")) {
@@ -1736,7 +1705,6 @@ class FusionENSKeyboardService : InputMethodService() {
                 try {
                     val resolvedValue = ensResolver.resolveENSName(inputText)
                     if (resolvedValue != null) {
-                        println("resolveENSForEnterKey: text record resolved to '$resolvedValue'")
                         // Clear the address bar and insert the resolved URL
                         clearAddressBarAndInsertURL(resolvedValue)
                         
@@ -1755,7 +1723,6 @@ class FusionENSKeyboardService : InputMethodService() {
             }
         } else {
             // This is a standard ENS name - use browser action setting
-            println("resolveENSForEnterKey: standard ENS name, using browser action setting")
             handleBrowserENSResolution(inputText)
         }
     }

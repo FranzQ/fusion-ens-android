@@ -1,296 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#1A1A1A"
-    android:padding="16dp">
+    android:orientation="vertical">
 
+    <!-- Custom header with title -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:background="?attr/colorSurface"
+        android:elevation="4dp">
 
-        <!-- Header -->
         <TextView
-            android:layout_width="match_parent"
+            android:id="@+id/title_text"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:text="Fusion ENS Settings"
             android:textSize="24sp"
-            android:textColor="#FFFFFF"
             android:textStyle="bold"
-            android:gravity="center"
-            android:layout_marginBottom="24dp" />
-
-        <!-- Keyboard Settings Section -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Keyboard Settings"
-            android:textSize="18sp"
-            android:textColor="#FFFFFF"
-            android:textStyle="bold"
-            android:layout_marginBottom="16dp" />
-
-        <!-- Haptic Feedback -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:background="#2C2C2C"
-            android:padding="16dp"
-            android:layout_marginBottom="8dp"
-            android:gravity="center_vertical">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Haptic Feedback"
-                    android:textSize="16sp"
-                    android:textColor="#FFFFFF" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Feel vibration when typing"
-                    android:textSize="12sp"
-                    android:textColor="#CCCCCC"
-                    android:layout_marginTop="4dp" />
-
-            </LinearLayout>
-
-            <Switch
-                android:id="@+id/hapticToggle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="true" />
-
-        </LinearLayout>
-
-        <!-- Keypress Sound -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:background="#2C2C2C"
-            android:padding="16dp"
-            android:layout_marginBottom="8dp"
-            android:gravity="center_vertical">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Keypress Sound"
-                    android:textSize="16sp"
-                    android:textColor="#FFFFFF" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Play sound when typing"
-                    android:textSize="12sp"
-                    android:textColor="#CCCCCC"
-                    android:layout_marginTop="4dp" />
-
-            </LinearLayout>
-
-            <Switch
-                android:id="@+id/soundToggle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="false" />
-
-        </LinearLayout>
-
-        <!-- Sound Volume -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#2C2C2C"
-            android:padding="16dp"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:id="@+id/soundVolumeText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Volume: 50%"
-                android:textSize="16sp"
-                android:textColor="#FFFFFF"
-                android:layout_marginBottom="8dp" />
-
-            <SeekBar
-                android:id="@+id/soundVolumeSeekBar"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:max="100"
-                android:progress="50" />
-
-        </LinearLayout>
-
-        <!-- Auto-Resolve ENS -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:background="#2C2C2C"
-            android:padding="16dp"
-            android:layout_marginBottom="8dp"
-            android:gravity="center_vertical">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Auto-Resolve ENS"
-                    android:textSize="16sp"
-                    android:textColor="#FFFFFF" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Automatically resolve ENS names as you type"
-                    android:textSize="12sp"
-                    android:textColor="#CCCCCC"
-                    android:layout_marginTop="4dp" />
-
-            </LinearLayout>
-
-            <Switch
-                android:id="@+id/autoResolveToggle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="false" />
-
-        </LinearLayout>
-
-        <!-- Browser Actions Section -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Browser Actions"
-            android:textSize="18sp"
-            android:textColor="#FFFFFF"
-            android:textStyle="bold"
-            android:layout_marginTop="24dp"
-            android:layout_marginBottom="16dp" />
-
-        <!-- Default Browser Action -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#2C2C2C"
-            android:padding="16dp"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Default Action"
-                android:textSize="16sp"
-                android:textColor="#FFFFFF"
-                android:layout_marginBottom="8dp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Choose what happens when you highlight or long-press spacebar on ENS names in browsers"
-                android:textSize="12sp"
-                android:textColor="#CCCCCC"
-                android:layout_marginBottom="12dp" />
-
-            <Spinner
-                android:id="@+id/browserActionSpinner"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:background="#3A3A3A" />
-
-        </LinearLayout>
-
-        <!-- About Section -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="About"
-            android:textSize="18sp"
-            android:textColor="#FFFFFF"
-            android:textStyle="bold"
-            android:layout_marginTop="24dp"
-            android:layout_marginBottom="16dp" />
-
-        <!-- Version -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:background="#2C2C2C"
-            android:padding="16dp"
-            android:layout_marginBottom="8dp"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Version"
-                android:textSize="16sp"
-                android:textColor="#FFFFFF" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="1.0.0"
-                android:textSize="16sp"
-                android:textColor="#CCCCCC" />
-
-        </LinearLayout>
-
-        <!-- Developer -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:background="#2C2C2C"
-            android:padding="16dp"
-            android:layout_marginBottom="8dp"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Developer"
-                android:textSize="16sp"
-                android:textColor="#FFFFFF" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Fusion ENS"
-                android:textSize="16sp"
-                android:textColor="#CCCCCC" />
-
-        </LinearLayout>
+            android:textColor="@color/colorOnSurface"
+            android:layout_marginStart="8dp" />
 
     </LinearLayout>
 
-</ScrollView>
+    <!-- Settings fragment container -->
+    <FrameLayout
+        android:id="@+id/settings_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginBottom="32dp" />
+
+</LinearLayout>

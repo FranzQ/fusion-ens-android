@@ -1,5 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Base application theme -->
+    <style name="Theme.FusionENS" parent="Theme.Material3.DayNight">
+        <item name="colorPrimary">@color/ens_blue</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/ens_secondary_light</item>
+        <item name="colorOnSecondary">@color/ens_secondary_dark</item>
+        <item name="colorError">@color/red_500</item>
+        <item name="colorOnError">@color/white</item>
+        <item name="colorSurface">@color/grey_100</item>
+        <item name="colorOnSurface">@color/black</item>
+        <item name="colorOutline">@color/grey_400</item>
+        <item name="colorSurfaceVariant">@color/grey_200</item>
+        <item name="colorOnSurfaceVariant">@color/grey_700</item>
+    </style>
 
-    <style name="Theme.FusionENS" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Settings-specific theme -->
+    <style name="Theme.FusionENS.Settings" parent="Theme.Material3.DayNight">
+        <item name="colorPrimary">@color/ens_blue</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/ens_secondary_light</item>
+        <item name="colorOnSecondary">@color/ens_secondary_dark</item>
+        <item name="colorError">@color/red_500</item>
+        <item name="colorOnError">@color/white</item>
+        <item name="colorSurface">@color/grey_100</item>
+        <item name="colorOnSurface">@color/black</item>
+        <item name="colorOutline">@color/grey_400</item>
+        <item name="colorSurfaceVariant">@color/grey_200</item>
+        <item name="colorOnSurfaceVariant">@color/grey_700</item>
+        <!-- Action Bar Colors -->
+        <item name="android:windowActionBar">true</item>
+        <!-- Preference Category Text Color -->
+        <item name="android:textColorSecondary">@color/ens_category_text</item>
+    </style>
+
+    <!-- Custom Switch Style for ENS Brand Color -->
+    <style name="ENS.Switch" parent="Widget.Material3.CompoundButton.Switch">
+        <item name="thumbTint">@color/ens_blue</item>
+        <item name="trackTint">@color/ens_blue</item>
+    </style>
+
 </resources>

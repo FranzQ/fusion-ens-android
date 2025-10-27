@@ -1,131 +1,132 @@
 package com.fusionens.keyboard
 
-import android.app.Activity
-import android.content.Context
-import android.content.Intent
 import android.os.Bundle
-import android.widget.*
+import android.view.View
+import android.widget.TextView
+import android.content.Intent
+import android.net.Uri
+import androidx.appcompat.app.AppCompatActivity
+import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.ListPreference
+import androidx.preference.Preference
 
-class SettingsActivity : Activity() {
-    
-    private lateinit var prefs: android.content.SharedPreferences
-    
-    // UI Components
-    private lateinit var hapticToggle: Switch
-    private lateinit var soundToggle: Switch
-    private lateinit var soundVolumeSeekBar: SeekBar
-    private lateinit var browserActionSpinner: Spinner
-    private lateinit var soundVolumeText: TextView
-    private lateinit var autoResolveToggle: Switch
+class SettingsActivity : AppCompatActivity() {
+
+    private lateinit var titleTextView: TextView
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Set the theme for Material Design
+        setTheme(R.style.Theme_FusionENS_Settings)
+        
+        // Set up action bar with Google-style design
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.setDisplayShowTitleEnabled(false) // Hide title initially
+        supportActionBar?.setBackgroundDrawable(null)
+        
+        // Set the custom layout
         setContentView(R.layout.activity_settings)
         
-        // Initialize SharedPreferences
-        prefs = getSharedPreferences("fusion_ens_keyboard", Context.MODE_PRIVATE)
+        // Get reference to title TextView
+        titleTextView = findViewById(R.id.title_text)
         
-        // Initialize UI components
-        initializeViews()
-        loadSettings()
-        setupListeners()
+        // Load the settings fragment
+        if (savedInstanceState == null) {
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.settings_container, SettingsFragment())
+                .commit()
+        }
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        onBackPressed()
+        return true
     }
     
-    private fun initializeViews() {
-        hapticToggle = findViewById(R.id.hapticToggle)
-        soundToggle = findViewById(R.id.soundToggle)
-        soundVolumeSeekBar = findViewById(R.id.soundVolumeSeekBar)
-        browserActionSpinner = findViewById(R.id.browserActionSpinner)
-        soundVolumeText = findViewById(R.id.soundVolumeText)
-        autoResolveToggle = findViewById(R.id.autoResolveToggle)
-        
-        // Setup browser action spinner
-        val browserActions = arrayOf(
-            "Etherscan",
-            "Website", 
-            "GitHub",
-            "X (Twitter)"
-        )
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, browserActions)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        browserActionSpinner.adapter = adapter
+    fun updateTitleVisibility(isScrolled: Boolean) {
+        if (isScrolled) {
+            // Show title in action bar when scrolled
+            supportActionBar?.setDisplayShowTitleEnabled(true)
+            supportActionBar?.title = "Fusion ENS Settings"
+            titleTextView.visibility = View.GONE
+        } else {
+            // Hide action bar title and show custom title when at top
+            supportActionBar?.setDisplayShowTitleEnabled(false)
+            titleTextView.visibility = View.VISIBLE
+        }
     }
-    
-    private fun loadSettings() {
-        // Load haptic feedback setting
-        hapticToggle.isChecked = prefs.getBoolean("haptic_feedback_enabled", true)
+
+    class SettingsFragment : PreferenceFragmentCompat() {
         
-        // Load sound setting
-        soundToggle.isChecked = prefs.getBoolean("keypress_sound_enabled", false)
+        private var parentActivity: SettingsActivity? = null
         
-        // Load sound volume (0-100)
-        val volume = prefs.getInt("sound_volume", 50)
-        soundVolumeSeekBar.progress = volume
-        soundVolumeText.text = "Volume: $volume%"
-        
-        // Load browser action setting
-        val browserAction = prefs.getString("default_browser_action", "etherscan") ?: "etherscan"
-        val actionIndex = when (browserAction) {
-            "etherscan" -> 0
-            "url" -> 1
-            "github" -> 2
-            "x" -> 3
-            else -> 0
-        }
-        browserActionSpinner.setSelection(actionIndex)
-        
-        // Load auto-resolve setting (disabled by default)
-        autoResolveToggle.isChecked = prefs.getBoolean("auto_resolve_enabled", false)
-        
-        // Update sound volume visibility
-        updateSoundVolumeVisibility()
-    }
-    
-    private fun setupListeners() {
-        hapticToggle.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("haptic_feedback_enabled", isChecked).apply()
+        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            setPreferencesFromResource(R.xml.preferences, rootKey)
+            
+            // Set up preference change listeners
+            setupPreferenceListeners()
         }
         
-        soundToggle.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("keypress_sound_enabled", isChecked).apply()
-            updateSoundVolumeVisibility()
+        override fun onAttach(context: android.content.Context) {
+            super.onAttach(context)
+            parentActivity = context as SettingsActivity
         }
         
-        soundVolumeSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    soundVolumeText.text = "Volume: $progress%"
-                    prefs.edit().putInt("sound_volume", progress).apply()
+        override fun onViewCreated(view: android.view.View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+            
+            // Add bottom padding to prevent last item cutoff
+            val listView = view.findViewById<android.widget.ListView>(android.R.id.list)
+            val bottomPadding = resources.getDimensionPixelSize(android.R.dimen.app_icon_size) * 2 // 96dp equivalent
+            listView?.setPadding(
+                listView.paddingLeft,
+                listView.paddingTop,
+                listView.paddingRight,
+                bottomPadding
+            )
+            
+            // Also add clipToPadding to ensure scrolling works properly
+            listView?.clipToPadding = false
+            
+            // Set up scroll listener for Google-style title behavior
+            listView?.setOnScrollListener(object : android.widget.AbsListView.OnScrollListener {
+                override fun onScrollStateChanged(view: android.widget.AbsListView?, scrollState: Int) {}
+                
+                override fun onScroll(view: android.widget.AbsListView?, firstVisibleItem: Int, visibleItemCount: Int, totalItemCount: Int) {
+                    val isScrolled = firstVisibleItem > 0
+                    parentActivity?.updateTitleVisibility(isScrolled)
                 }
+            })
+        }
+        
+        private fun setupPreferenceListeners() {
+            // Handle browser action preference changes
+            val browserActionPreference = findPreference<ListPreference>("default_browser_action")
+            browserActionPreference?.setOnPreferenceChangeListener { _, newValue ->
+                // You can add any custom logic here if needed
+                true
             }
             
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
-        
-        autoResolveToggle.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("auto_resolve_enabled", isChecked).apply()
-        }
-        
-        browserActionSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                val action = when (position) {
-                    0 -> "etherscan"
-                    1 -> "url"
-                    2 -> "github"
-                    3 -> "x"
-                    else -> "etherscan"
-                }
-                prefs.edit().putString("default_browser_action", action).apply()
+            // Set summary provider for browser action to show current value
+            browserActionPreference?.summaryProvider = ListPreference.SimpleSummaryProvider.getInstance()
+            
+            // Handle clickable preferences
+            val privacyPolicyPreference = findPreference<Preference>("privacy_policy")
+            privacyPolicyPreference?.setOnPreferenceClickListener {
+                // Open Privacy Policy in browser
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.fusionens.com/privacy"))
+                startActivity(intent)
+                true
             }
             
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+            val termsOfServicePreference = findPreference<Preference>("terms_of_service")
+            termsOfServicePreference?.setOnPreferenceClickListener {
+                // Open Terms of Service in browser
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.fusionens.com/terms"))
+                startActivity(intent)
+                true
+            }
         }
-    }
-    
-    private fun updateSoundVolumeVisibility() {
-        val isSoundEnabled = soundToggle.isChecked
-        soundVolumeSeekBar.isEnabled = isSoundEnabled
-        soundVolumeText.alpha = if (isSoundEnabled) 1.0f else 0.5f
     }
 }

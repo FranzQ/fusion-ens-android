@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- Keyboard Settings Category -->
+    <PreferenceCategory 
+        app:title="Keyboard Settings"
+        app:key="keyboard_settings">
+        
+        <SwitchPreferenceCompat
+            app:key="haptic_feedback"
+            app:title="Haptic Feedback"
+            app:summary="Feel vibration when typing"
+            app:icon="@drawable/ic_vibration"
+            app:defaultValue="true"
+            app:switchStyle="@style/ENS.Switch" />
+        
+        <SwitchPreferenceCompat
+            app:key="keypress_sound"
+            app:title="Keypress Sound"
+            app:summary="Play sound when typing"
+            app:icon="@drawable/ic_volume_up"
+            app:defaultValue="false"
+            app:switchStyle="@style/ENS.Switch" />
+        
+        <SwitchPreferenceCompat
+            app:key="auto_resolve_enabled"
+            app:title="Auto-Resolve ENS"
+            app:summary="Automatically resolve ENS names as you type"
+            app:icon="@drawable/ic_auto_resolve"
+            app:defaultValue="false"
+            app:switchStyle="@style/ENS.Switch" />
+            
+    </PreferenceCategory>
+
+    <!-- Browser Actions Category -->
+    <PreferenceCategory 
+        app:title="Browser Actions"
+        app:key="browser_actions">
+        
+        <ListPreference
+            app:key="default_browser_action"
+            app:title="Default Action"
+            app:summary="Choose what happens when you highlight ENS names in browsers"
+            app:icon="@drawable/ic_browser"
+            app:entries="@array/browser_action_entries"
+            app:entryValues="@array/browser_action_values"
+            app:defaultValue="etherscan" />
+            
+    </PreferenceCategory>
+
+    <!-- About Category -->
+    <PreferenceCategory 
+        app:title="About"
+        app:key="about">
+        
+        <Preference
+            app:key="version"
+            app:title="Version"
+            app:summary="1.0.0"
+            app:icon="@drawable/ic_info" />
+        
+        <Preference
+            app:key="privacy_policy"
+            app:title="Privacy Policy"
+            app:summary="View our privacy policy"
+            app:icon="@drawable/ic_privacy" />
+        
+        <Preference
+            app:key="terms_of_service"
+            app:title="Terms of Service"
+            app:summary="View our terms of service"
+            app:icon="@drawable/ic_terms" />
+            
+    </PreferenceCategory>
+
+</PreferenceScreen>

@@ -38,7 +38,7 @@
             android:name=".SettingsActivity"
             android:exported="true"
             android:label="Fusion ENS Settings"
-            android:theme="@style/Theme.FusionENS" />
+            android:theme="@style/Theme.FusionENS.Settings" />
         
         <!-- Original Working Keyboard -->
         <service
