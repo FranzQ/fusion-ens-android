@@ -428,29 +428,62 @@ class FusionENSKeyboardService : InputMethodService() {
     
     private fun resolveCurrentTextAsENS() {
         try {
-            // Sync current text with input field
-            syncCurrentText()
-            println("resolveCurrentTextAsENS: currentText = '$currentText'")
-            
-            // Check if current text is a valid ENS name
-            if (ensResolver.isValidENS(currentText)) {
-                println("resolveCurrentTextAsENS: currentText is valid ENS")
-                val ensName = ensResolver.getENSNameFromText(currentText)
-                println("resolveCurrentTextAsENS: extracted ensName = '$ensName'")
-                if (ensName != null) {
-                    // Check if we're in a browser context
-                    if (isInBrowserContext()) {
-                        // Handle browser-specific action
-                        handleBrowserENSResolution(ensName)
-                    } else {
-                        // Standard resolution (replace with address)
+            // Get the complete text from the input field (not just currentText)
+            val inputConnection = currentInputConnection
+            if (inputConnection != null) {
+                val beforeText = inputConnection.getTextBeforeCursor(1000, 0)?.toString() ?: ""
+                val afterText = inputConnection.getTextAfterCursor(1000, 0)?.toString() ?: ""
+                val fullText = beforeText + afterText
+                
+                println("resolveCurrentTextAsENS: beforeText = '$beforeText'")
+                println("resolveCurrentTextAsENS: afterText = '$afterText'")
+                println("resolveCurrentTextAsENS: fullText = '$fullText'")
+                
+                // Use the same smart extraction logic as extractInputFromAddressBar
+                val trimmedText = fullText.trim()
+                
+                // Smart extraction: look for ENS patterns in the text
+                val ensPatterns = listOf(
+                    // Multi-chain ENS with .eth (e.g., "ses.eth:x", "vitalik.eth:btc")
+                    Regex("[a-zA-Z0-9-]+\\.eth:[a-zA-Z0-9]+"),
+                    // Multi-chain ENS shortcut (e.g., "ses:x", "vitalik:btc") 
+                    Regex("[a-zA-Z0-9-]+:[a-zA-Z0-9]+"),
+                    // Standard ENS (e.g., "vitalik.eth", "ses.eth")
+                    Regex("[a-zA-Z0-9-]+\\.eth")
+                )
+                
+                // Find the first ENS pattern in the text
+                for (pattern in ensPatterns) {
+                    val match = pattern.find(trimmedText)
+                    if (match != null) {
+                        val ensName = match.value
+                        println("resolveCurrentTextAsENS: found ENS pattern '$ensName'")
+                        
+                        // For spacebar long press, always just replace text (don't navigate)
+                        // This is different from Enter key which should navigate in browser context
+                        resolveENSAndReplace(ensName)
+                        return
+                    }
+                }
+                
+                // If no ENS pattern found, try the last word (for backward compatibility)
+                val words = trimmedText.split("\\s+".toRegex())
+                val lastWord = if (words.isNotEmpty()) words.last() else trimmedText
+                println("resolveCurrentTextAsENS: no ENS pattern found, trying last word: '$lastWord'")
+                
+                if (ensResolver.isValidENS(lastWord)) {
+                    println("resolveCurrentTextAsENS: lastWord is valid ENS")
+                    val ensName = ensResolver.getENSNameFromText(lastWord)
+                    println("resolveCurrentTextAsENS: extracted ensName = '$ensName'")
+                    if (ensName != null) {
+                        // For spacebar long press, always just replace text (don't navigate)
                         resolveENSAndReplace(ensName)
                     }
                 } else {
-                    println("resolveCurrentTextAsENS: ensName is null")
+                    println("resolveCurrentTextAsENS: no valid ENS found in text")
                 }
             } else {
-                println("resolveCurrentTextAsENS: currentText is not valid ENS")
+                println("resolveCurrentTextAsENS: inputConnection is null")
             }
         } catch (e: Exception) {
             // Log error and prevent crash
@@ -586,18 +619,16 @@ class FusionENSKeyboardService : InputMethodService() {
                         openURL(resolvedValue)
                         saveENSName(ensName)
                     } else {
-                        // This is an address - replace the text
-                        println("resolveENSAndReplace: Replacing text with address: $resolvedValue")
-                        replaceCurrentTextInInputField(resolvedValue)
-                        currentText = resolvedValue
+                        // This is an address - replace only the ENS name
+                        println("resolveENSAndReplace: Replacing ENS name with address: $resolvedValue")
+                        replaceENSNameInText(ensName, resolvedValue)
                         saveENSName(ensName)
                     }
                 } else {
-                    // Not in browser context - always replace text (never open URLs)
+                    // Not in browser context - always replace only the ENS name (never open URLs)
                     // This matches iOS behavior: text records resolve to addresses in regular text fields
-                    println("resolveENSAndReplace: Replacing text with resolved value: $resolvedValue")
-                    replaceCurrentTextInInputField(resolvedValue)
-                    currentText = resolvedValue
+                    println("resolveENSAndReplace: Replacing ENS name with resolved value: $resolvedValue")
+                    replaceENSNameInText(ensName, resolvedValue)
                     saveENSName(ensName)
                 }
                 
@@ -606,6 +637,59 @@ class FusionENSKeyboardService : InputMethodService() {
             } else {
                 println("resolveENSAndReplace: no value resolved for '$ensName'")
             }
+        }
+    }
+    
+    private fun replaceENSNameInText(ensName: String, resolvedValue: String) {
+        try {
+            val inputConnection = currentInputConnection
+            if (inputConnection != null) {
+                // Get the complete text from the input field
+                val beforeText = inputConnection.getTextBeforeCursor(1000, 0)?.toString() ?: ""
+                val afterText = inputConnection.getTextAfterCursor(1000, 0)?.toString() ?: ""
+                val fullText = beforeText + afterText
+                
+                println("replaceENSNameInText: fullText = '$fullText'")
+                println("replaceENSNameInText: replacing '$ensName' with '$resolvedValue'")
+                
+                // Find the ENS name in the complete text
+                val ensNameIndex = fullText.indexOf(ensName)
+                if (ensNameIndex != -1) {
+                    // Calculate the position relative to cursor
+                    val cursorPosition = beforeText.length
+                    val ensNameStart = ensNameIndex
+                    val ensNameEnd = ensNameIndex + ensName.length
+                    
+                    println("replaceENSNameInText: cursorPosition = $cursorPosition")
+                    println("replaceENSNameInText: ensNameStart = $ensNameStart, ensNameEnd = $ensNameEnd")
+                    
+                    // Move cursor to the start of the ENS name
+                    val moveToStart = ensNameStart - cursorPosition
+                    if (moveToStart != 0) {
+                        inputConnection.setSelection(ensNameStart, ensNameStart)
+                    }
+                    
+                    // Select the ENS name
+                    inputConnection.setSelection(ensNameStart, ensNameEnd)
+                    
+                    // Replace the selected text with the resolved value
+                    inputConnection.commitText(resolvedValue, 1)
+                    
+                    // Update current text
+                    val newText = fullText.substring(0, ensNameStart) + resolvedValue + fullText.substring(ensNameEnd)
+                    currentText = newText
+                    println("replaceENSNameInText: new text = '$newText'")
+                } else {
+                    println("replaceENSNameInText: ENS name '$ensName' not found in text")
+                    // Fallback: replace all text before cursor
+                    inputConnection.deleteSurroundingText(beforeText.length, 0)
+                    inputConnection.commitText(resolvedValue, 1)
+                    currentText = resolvedValue + afterText
+                }
+            }
+        } catch (e: Exception) {
+            println("Error replacing ENS name in text: ${e.message}")
+            e.printStackTrace()
         }
     }
     
@@ -1119,19 +1203,35 @@ class FusionENSKeyboardService : InputMethodService() {
         
         if (isBrowser) {
             // In browser context - try to resolve ENS before triggering enter
-            val inputText = extractInputFromAddressBar()
-            println("handleEnterKeyPress: extracted inputText = '$inputText'")
-            
-            if (inputText.isNotEmpty() && ensResolver.isValidENS(inputText)) {
-                println("handleEnterKeyPress: Valid ENS detected, resolving...")
-                // Show loading state on enter button
-                updateEnterButtonToLoading()
+            val inputConnection = currentInputConnection
+            if (inputConnection != null) {
+                // Get the FULL text from the input field
+                val beforeText = inputConnection.getTextBeforeCursor(1000, 0)?.toString() ?: ""
+                val afterText = inputConnection.getTextAfterCursor(1000, 0)?.toString() ?: ""
+                val fullText = beforeText + afterText
+                val trimmedFullText = fullText.trim()
                 
-                // Resolve ENS and then trigger enter
-                resolveENSForEnterKey(inputText)
+                println("handleEnterKeyPress: fullText = '$trimmedFullText'")
+                
+                // Check if the FULL input is ONLY an ENS name (not part of a sentence)
+                val isOnlyENS = trimmedFullText.isNotEmpty() && 
+                               ensResolver.isValidENS(trimmedFullText) && 
+                               !trimmedFullText.contains(" ") // No spaces = only ENS name
+                
+                if (isOnlyENS) {
+                    println("handleEnterKeyPress: Full input is only ENS name, resolving...")
+                    // Show loading state on enter button
+                    updateEnterButtonToLoading()
+                    
+                    // Resolve ENS and then trigger enter
+                    resolveENSForEnterKey(trimmedFullText)
+                } else {
+                    println("handleEnterKeyPress: Full input contains other text or is not ENS, proceeding with normal enter")
+                    // Not only an ENS name, proceed with normal enter
+                    inputConnection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                }
             } else {
-                println("handleEnterKeyPress: Not a valid ENS, proceeding with normal enter")
-                // Not an ENS name, proceed with normal enter
+                // No input connection, proceed with normal enter
                 inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
             }
         } else {
@@ -1214,47 +1314,42 @@ class FusionENSKeyboardService : InputMethodService() {
         val ensName = selectedText.trim()
         println("resolveSelectedENS: resolving selectedText = '$ensName'")
         
-        // Check if we're in a browser context
-        if (isInBrowserContext()) {
-            // Handle browser-specific action
-            handleBrowserENSResolution(ensName)
-        } else {
-            // Standard resolution (replace with address) - NOT in browser context
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    val resolvedValue = ensResolver.resolveENSName(ensName)
-                    println("resolveSelectedENS: resolved value = '$resolvedValue'")
-                    if (resolvedValue != null) {
-                        println("ENS Resolution Success: $ensName -> $resolvedValue")
+        // For highlighting/selection, always just replace text (don't navigate)
+        // This is different from Enter key which should navigate in browser context
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val resolvedValue = ensResolver.resolveENSName(ensName)
+                println("resolveSelectedENS: resolved value = '$resolvedValue'")
+                if (resolvedValue != null) {
+                    println("ENS Resolution Success: $ensName -> $resolvedValue")
+                    
+                    // Always replace text (never open URLs) for highlighting/selection
+                    // This matches iOS behavior: text records resolve to addresses in regular text fields
+                    println("resolveSelectedENS: Replacing text with resolved value: $resolvedValue")
+                    withContext(Dispatchers.Main) {
+                        replaceSelectedText(resolvedValue)
+                        saveENSName(ensName)
+                        showENSResolutionFeedback(ensName, resolvedValue)
                         
-                        // In non-browser context, always replace text (never open URLs)
-                        // This matches iOS behavior: text records resolve to addresses in regular text fields
-                        println("resolveSelectedENS: Replacing text with resolved value: $resolvedValue")
-                        withContext(Dispatchers.Main) {
-                            replaceSelectedText(resolvedValue)
-                            saveENSName(ensName)
-                            showENSResolutionFeedback(ensName, resolvedValue)
-                            
-                            // Clear the resolved text after a delay to allow new selections
-                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                lastResolvedText = ""
-                            }, 2000)
-                        }
-                    } else {
-                        println("ENS Resolution Error: $ensName not found")
-                        withContext(Dispatchers.Main) {
-                            showENSResolutionError(ensName)
-                            // Clear the resolved text even on error
+                        // Clear the resolved text after a delay to allow new selections
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                             lastResolvedText = ""
-                        }
+                        }, 2000)
                     }
-                } catch (e: Exception) {
-                    println("ENS Resolution error: ${e.message}")
+                } else {
+                    println("ENS Resolution Error: $ensName not found")
                     withContext(Dispatchers.Main) {
                         showENSResolutionError(ensName)
                         // Clear the resolved text even on error
                         lastResolvedText = ""
                     }
+                }
+            } catch (e: Exception) {
+                println("ENS Resolution error: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    showENSResolutionError(ensName)
+                    // Clear the resolved text even on error
+                    lastResolvedText = ""
                 }
             }
         }
@@ -1578,22 +1673,50 @@ class FusionENSKeyboardService : InputMethodService() {
         try {
             val inputConnection = currentInputConnection
             if (inputConnection != null) {
+                // Get text before and after cursor without selecting anything
                 val beforeText = inputConnection.getTextBeforeCursor(1000, 0)?.toString() ?: ""
                 val afterText = inputConnection.getTextAfterCursor(1000, 0)?.toString() ?: ""
                 val fullText = beforeText + afterText
-                println("extractInputFromAddressBar: beforeText = '$beforeText', afterText = '$afterText', fullText = '$fullText'")
                 
-                // Extract the last word/input (similar to iOS implementation)
-                val words = fullText.trim().split("\\s+".toRegex())
-                val result = if (words.isNotEmpty()) words.last() else ""
-                println("extractInputFromAddressBar: words = $words, result = '$result'")
+                println("extractInputFromAddressBar: beforeText = '$beforeText' (${beforeText.length})")
+                println("extractInputFromAddressBar: afterText = '$afterText' (${afterText.length})")
+                println("extractInputFromAddressBar: fullText = '$fullText'")
+                
+                val trimmedText = fullText.trim()
+                println("extractInputFromAddressBar: trimmedText = '$trimmedText'")
+                
+                // Smart extraction: look for ENS patterns in the text
+                // This handles cases like "hi there ses.eth:x" -> extracts "ses.eth:x"
+                val ensPatterns = listOf(
+                    // Multi-chain ENS with .eth (e.g., "ses.eth:x", "vitalik.eth:btc")
+                    Regex("[a-zA-Z0-9-]+\\.eth:[a-zA-Z0-9]+"),
+                    // Multi-chain ENS shortcut (e.g., "ses:x", "vitalik:btc") 
+                    Regex("[a-zA-Z0-9-]+:[a-zA-Z0-9]+"),
+                    // Standard ENS (e.g., "vitalik.eth", "ses.eth")
+                    Regex("[a-zA-Z0-9-]+\\.eth")
+                )
+                
+                // Find the first ENS pattern in the text
+                for (pattern in ensPatterns) {
+                    val match = pattern.find(trimmedText)
+                    if (match != null) {
+                        val ensName = match.value
+                        println("extractInputFromAddressBar: found ENS pattern '$ensName'")
+                        return ensName
+                    }
+                }
+                
+                // If no ENS pattern found, return the last word (for backward compatibility)
+                val words = trimmedText.split("\\s+".toRegex())
+                val result = if (words.isNotEmpty()) words.last() else trimmedText
+                println("extractInputFromAddressBar: no ENS pattern found, using last word: '$result'")
                 return result
             }
         } catch (e: Exception) {
             println("extractInputFromAddressBar: error = ${e.message}")
-            // Fallback to current text
+            e.printStackTrace()
         }
-        println("extractInputFromAddressBar: fallback to currentText = '$currentText'")
+        println("extractInputFromAddressBar: final fallback to currentText = '$currentText'")
         return currentText
     }
     
@@ -1604,25 +1727,36 @@ class FusionENSKeyboardService : InputMethodService() {
     }
     
     private fun resolveENSForEnterKey(inputText: String) {
-        CoroutineScope(Dispatchers.Main).launch {
-            try {
-                val resolvedValue = ensResolver.resolveENSName(inputText)
-                if (resolvedValue != null) {
-                    // Clear the address bar and insert the resolved URL
-                    clearAddressBarAndInsertURL(resolvedValue)
-                    
-                    // Trigger the enter key to navigate
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+        println("resolveENSForEnterKey: resolving inputText = '$inputText'")
+        
+        // Check if this is a text record (like ses.eth:x) or a standard ENS name (like ses.eth)
+        if (inputText.contains(":")) {
+            // This is a text record - resolve directly and navigate to URL
+            CoroutineScope(Dispatchers.Main).launch {
+                try {
+                    val resolvedValue = ensResolver.resolveENSName(inputText)
+                    if (resolvedValue != null) {
+                        println("resolveENSForEnterKey: text record resolved to '$resolvedValue'")
+                        // Clear the address bar and insert the resolved URL
+                        clearAddressBarAndInsertURL(resolvedValue)
+                        
+                        // Trigger the enter key to navigate
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                        }, 200) // Small delay to ensure URL is inserted
+                    } else {
+                        // If no resolution, proceed with normal enter
                         inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-                    }, 200) // Small delay to ensure URL is inserted
-                } else {
-                    // If no resolution, proceed with normal enter
+                    }
+                } catch (e: Exception) {
+                    // If error, proceed with normal enter
                     inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
                 }
-            } catch (e: Exception) {
-                // If error, proceed with normal enter
-                inputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
             }
+        } else {
+            // This is a standard ENS name - use browser action setting
+            println("resolveENSForEnterKey: standard ENS name, using browser action setting")
+            handleBrowserENSResolution(inputText)
         }
     }
     
