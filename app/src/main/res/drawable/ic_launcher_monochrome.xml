@@ -5,11 +5,6 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     
-    <!-- Background with ENS brand gradient -->
-    <path
-        android:fillColor="#0080BC"
-        android:pathData="M0,0h108v108h-108z" />
-    
     <!-- Keyboard base -->
     <path
         android:fillColor="#FFFFFF"
@@ -18,66 +13,66 @@
     <!-- Keyboard keys -->
     <!-- Top row -->
     <path
-        android:fillColor="#F5F5F5"
+        android:fillColor="#000000"
         android:pathData="M18,76 L26,76 L26,84 L18,84 Z" />
     <path
-        android:fillColor="#F5F5F5"
+        android:fillColor="#000000"
         android:pathData="M30,76 L38,76 L38,84 L30,84 Z" />
     <path
-        android:fillColor="#F5F5F5"
+        android:fillColor="#000000"
         android:pathData="M42,76 L50,76 L50,84 L42,84 Z" />
     <path
-        android:fillColor="#F5F5F5"
+        android:fillColor="#000000"
         android:pathData="M54,76 L62,76 L62,84 L54,84 Z" />
     <path
-        android:fillColor="#F5F5F5"
+        android:fillColor="#000000"
         android:pathData="M66,76 L74,76 L74,84 L66,84 Z" />
     <path
-        android:fillColor="#F5F5F5"
+        android:fillColor="#000000"
         android:pathData="M78,76 L86,76 L86,84 L78,84 Z" />
     
     <!-- Bottom row -->
     <path
-        android:fillColor="#F5F5F5"
+        android:fillColor="#000000"
         android:pathData="M18,88 L26,88 L26,96 L18,96 Z" />
     <path
-        android:fillColor="#F5F5F5"
+        android:fillColor="#000000"
         android:pathData="M30,88 L38,88 L38,96 L30,96 Z" />
     <path
-        android:fillColor="#F5F5F5"
+        android:fillColor="#000000"
         android:pathData="M42,88 L50,88 L50,96 L42,96 Z" />
     <path
-        android:fillColor="#F5F5F5"
+        android:fillColor="#000000"
         android:pathData="M54,88 L62,88 L62,96 L54,96 Z" />
     <path
-        android:fillColor="#F5F5F5"
+        android:fillColor="#000000"
         android:pathData="M66,88 L74,88 L74,96 L66,96 Z" />
     <path
-        android:fillColor="#F5F5F5"
+        android:fillColor="#000000"
         android:pathData="M78,88 L86,88 L86,96 L78,96 Z" />
     
     <!-- ENS text -->
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="#000000"
         android:pathData="M24,45 L84,45 L84,55 L24,55 Z" />
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="#000000"
         android:pathData="M24,35 L84,35 L84,40 L24,40 Z" />
     
     <!-- .eth extension -->
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="#000000"
         android:pathData="M24,25 L84,25 L84,30 L24,30 Z" />
     
     <!-- Decorative elements -->
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="#000000"
         android:pathData="M54,12 A3,3 0 0,1 57,15 A3,3 0 0,1 54,18 A3,3 0 0,1 51,15 A3,3 0 0,1 54,12 Z" />
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="#000000"
         android:pathData="M45,13 A2,2 0 0,1 47,15 A2,2 0 0,1 45,17 A2,2 0 0,1 43,15 A2,2 0 0,1 45,13 Z" />
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="#000000"
         android:pathData="M63,13 A2,2 0 0,1 65,15 A2,2 0 0,1 63,17 A2,2 0 0,1 61,15 A2,2 0 0,1 63,13 Z" />
     
 </vector>
